@@ -313,14 +313,38 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		cacheReadTokensAdj := dCacheTokens
 		cacheWriteTokensAdj := dCachedCreationTokens
 
-		tierHit, hasTierHit := ratio_setting.ResolveRequestTierHit(
-			channelID,
-			summary.ModelName,
-			int64(summary.PromptTokens),
-			summary.CostDiscountPercent,
-			summary.MarkupDiscountPercent,
-			summary.GroupRatio,
-		)
+		var tierHit ratio_setting.RequestTierHit
+		var hasTierHit bool
+		usedIndependentTimePricing := false
+		if relayInfo.PriceData.TimePricingPlanID > 0 && strings.TrimSpace(relayInfo.PriceData.TimePricingPayload) != "" {
+			if payload, err := model.ParseChannelModelPricePlanPayload(relayInfo.PriceData.TimePricingPayload); err == nil {
+				if payload.ResolvedMode() == model.ChannelModelPricePlanModePrice {
+					usedIndependentTimePricing = true
+					var globalTier *ratio_setting.RequestTierPricing
+					if rule, ok := ratio_setting.GetModelRequestTierPricing(summary.ModelName); ok {
+						globalTier = &rule
+					}
+					tierHit, hasTierHit = ratio_setting.ResolveRequestTierHitWithRules(
+						payload.ModelRequestTierPricing,
+						globalTier,
+						int64(summary.PromptTokens),
+						summary.CostDiscountPercent,
+						summary.MarkupDiscountPercent,
+						summary.GroupRatio,
+					)
+				}
+			}
+		}
+		if !usedIndependentTimePricing {
+			tierHit, hasTierHit = ratio_setting.ResolveRequestTierHit(
+				channelID,
+				summary.ModelName,
+				int64(summary.PromptTokens),
+				summary.CostDiscountPercent,
+				summary.MarkupDiscountPercent,
+				summary.GroupRatio,
+			)
+		}
 		// 用户指定价为最终价（全局官方价 × 总折扣），不再套用渠道阶梯计费。
 		if relayInfo.PriceData.UserPricingOverride {
 			hasTierHit = false

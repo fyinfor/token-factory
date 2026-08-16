@@ -362,6 +362,8 @@ func migrateDB() error {
 		&UserModelGroupOverride{},
 		&UserModelPricingOverride{},
 		&UserModelPricingChannel{},
+		&ChannelModelPricePlan{},
+		&ChannelModelPriceSchedule{},
 		&TemporaryUpload{},
 	)
 	if err != nil {
@@ -498,6 +500,8 @@ func migrateDBFast() error {
 		{&UserRouteConfig{}, "UserRouteConfig"},
 		{&UserModelGroupWeight{}, "UserModelGroupWeight"},
 		{&UserModelGroupOverride{}, "UserModelGroupOverride"},
+		{&ChannelModelPricePlan{}, "ChannelModelPricePlan"},
+		{&ChannelModelPriceSchedule{}, "ChannelModelPriceSchedule"},
 		{&TemporaryUpload{}, "TemporaryUpload"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大

@@ -117,7 +117,32 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	appendChannelPriceDiscountToConsumeOther(relayInfo, other)
+	appendTimePricingInfo(relayInfo.PriceData, other)
 	return other
+}
+
+func appendTimePricingInfo(priceData types.PriceData, other map[string]interface{}) {
+	if other == nil || priceData.TimePricingPlanID <= 0 {
+		return
+	}
+	other["time_pricing_schedule_id"] = priceData.TimePricingScheduleID
+	other["time_pricing_plan_id"] = priceData.TimePricingPlanID
+	other["time_pricing_plan_version"] = priceData.TimePricingPlanVersion
+	other["time_pricing_schedule_name"] = priceData.TimePricingScheduleName
+	other["time_pricing_plan_name"] = priceData.TimePricingPlanName
+	other["time_pricing_timezone"] = priceData.TimePricingTimezone
+	if priceData.TimePricingWeekdays > 0 && priceData.TimePricingStartMinute != priceData.TimePricingEndMinute {
+		other["time_pricing_weekdays"] = priceData.TimePricingWeekdays
+		other["time_pricing_start_minute"] = priceData.TimePricingStartMinute
+		other["time_pricing_end_minute"] = priceData.TimePricingEndMinute
+		if priceData.TimePricingEffectiveFrom != "" {
+			other["time_pricing_effective_from"] = priceData.TimePricingEffectiveFrom
+		}
+		if priceData.TimePricingEffectiveTo != "" {
+			other["time_pricing_effective_to"] = priceData.TimePricingEffectiveTo
+		}
+	}
+	other["time_pricing_matched_at"] = priceData.TimePricingMatchedAt
 }
 
 func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
@@ -356,6 +381,7 @@ func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData types.Price
 	other["global_image_ratio"] = priceData.GlobalImageRatio
 	other["global_audio_ratio"] = priceData.GlobalAudioRatio
 	other["global_audio_completion_ratio"] = priceData.GlobalAudioCompletionRatio
+	appendTimePricingInfo(priceData, other)
 	appendRequestPath(nil, relayInfo, other)
 	return other
 }

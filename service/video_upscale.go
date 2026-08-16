@@ -325,18 +325,61 @@ func VideoUpscalePricePerSecond(channelID int, modelName, targetResolutionLabel,
 	return 0, false
 }
 
+func videoUpscalePricePerSecondFromRules(rules ratio_setting.VideoPricingRules, targetResolutionLabel, sourceResolutionLabel string) (float64, bool) {
+	target := normalizeResolutionLabelForMatch(targetResolutionLabel)
+	source := normalizeResolutionLabelForMatch(sourceResolutionLabel)
+	if target == "" {
+		return 0, false
+	}
+	var fallback float64
+	hasFallback := false
+	for _, row := range rules.VideoUpscalePerSecond {
+		if row.Price <= 0 || normalizeResolutionLabelForMatch(row.Resolution) != target {
+			continue
+		}
+		rowSource := normalizeResolutionLabelForMatch(row.SourceResolution)
+		if source != "" && rowSource != "" && rowSource == source {
+			return row.Price, true
+		}
+		if rowSource == "" && !hasFallback {
+			fallback = row.Price
+			hasFallback = true
+		}
+	}
+	if hasFallback {
+		return fallback, true
+	}
+	return 0, false
+}
+
 // videoUpscaleEffectivePricePerSecondUSD 计算超分每秒有效价（USD）。
 // 超分价来自模型价格配置（无独立渠道档），作为基准价传入；全局价传 0 时
 // EffectiveRuleUnitPrice 会回退为基准价，避免加价折扣为 0% 时有效价被算成 0。
 func videoUpscaleEffectivePricePerSecondUSD(task *model.Task, targetResolutionLabel, sourceResolutionLabel string) (float64, bool) {
 	modelName := taskModelName(task)
-	price, ok := VideoUpscalePricePerSecond(task.ChannelId, modelName, targetResolutionLabel, sourceResolutionLabel)
+	var price float64
+	var ok bool
+	bc := task.PrivateData.BillingContext
+	hasIndependentTimePricing := false
+	if bc != nil && bc.TimePricingPlanID > 0 && strings.TrimSpace(bc.TimePricingPayload) != "" {
+		if payload, err := model.ParseChannelModelPricePlanPayload(bc.TimePricingPayload); err == nil && payload.ResolvedMode() == model.ChannelModelPricePlanModePrice {
+			hasIndependentTimePricing = true
+			if payload.VideoPricingRules != nil {
+				price, ok = videoUpscalePricePerSecondFromRules(*payload.VideoPricingRules, targetResolutionLabel, sourceResolutionLabel)
+			}
+		}
+	}
+	if !hasIndependentTimePricing {
+		price, ok = VideoUpscalePricePerSecond(task.ChannelId, modelName, targetResolutionLabel, sourceResolutionLabel)
+	}
 	if !ok || price <= 0 {
 		return 0, false
 	}
-	bc := task.PrivateData.BillingContext
 	costDisc := taskBillingContextEffectiveCostPercent(bc, task.ChannelId)
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	if bc != nil && bc.TimePricingPlanID > 0 && bc.MarkupDiscountPercent != nil {
+		markupDisc = *bc.MarkupDiscountPercent
+	}
 	eff := effectiveVideoPerSecondUSD(price, 0, costDisc, markupDisc)
 	if eff <= 0 {
 		return 0, false
@@ -416,6 +459,11 @@ func videoUpscalePreChargeOther(c *gin.Context, info *relaycommon.RelayInfo) map
 		return nil
 	}
 	price, ok := VideoUpscalePricePerSecond(info.ChannelId, info.OriginModelName, rule.TargetResolution, rule.SourceResolution)
+	if info.PriceData.TimePricingPlanID > 0 && strings.TrimSpace(info.PriceData.TimePricingPayload) != "" {
+		if payload, err := model.ParseChannelModelPricePlanPayload(info.PriceData.TimePricingPayload); err == nil && payload.ResolvedMode() == model.ChannelModelPricePlanModePrice && payload.VideoPricingRules != nil {
+			price, ok = videoUpscalePricePerSecondFromRules(*payload.VideoPricingRules, rule.TargetResolution, rule.SourceResolution)
+		}
+	}
 	if !ok || price <= 0 {
 		return nil
 	}

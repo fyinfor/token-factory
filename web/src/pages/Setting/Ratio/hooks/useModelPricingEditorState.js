@@ -1884,6 +1884,7 @@ export function useModelPricingEditorState({
     optionKeys,
     onSaveOutput,
     visibleCategories = null,
+    includeAllCandidateModels = false,
 }) {
     const toPositiveNumber = (value, fallback = 1) => {
         const n = Number(value);
@@ -1989,7 +1990,7 @@ export function useModelPricingEditorState({
         // 删除定价并保存后应从本表消失，仅在「未设置」页出现。「unset」页仍用全候选 + isBasePricingUnset 筛选。
         const pricedModelNames = collectModelNamesFromPricingSourceMaps(sourceMaps);
         const names = strictCandidateModelNames
-            ? filterMode === 'unset'
+            ? filterMode === 'unset' || includeAllCandidateModels
                 ? new Set(candidateModelNames)
                 : new Set(
                     candidateModelNames.filter((n) => pricedModelNames.has(n)),
@@ -2046,6 +2047,7 @@ export function useModelPricingEditorState({
         candidateModelNames,
         defaultVideoPriceUnit,
         filterMode,
+        includeAllCandidateModels,
         options,
         resolvedOptionKeys,
         strictCandidateModelNames,

@@ -270,15 +270,22 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		channelID = info.ChannelId
 	}
 	modelName := info.OriginModelName
+	timePricing := resolveChannelModelTimePricing(c, channelID, modelName)
+	independentTimePricing := usesIndependentTimePricing(timePricing)
+	hasTimePricing := independentTimePricing &&
+		((timePricing.Payload.ImagePrice != nil && *timePricing.Payload.ImagePrice > 0) ||
+			(timePricing.Payload.ImagePricingRules != nil && ratio_setting.HasUsableImagePerImageRules(*timePricing.Payload.ImagePricingRules)))
 
-	if !HasImageGenerationPricing(channelID, modelName) &&
+	if !hasTimePricing && !HasImageGenerationPricing(channelID, modelName) &&
 		!HasImageGenerationPricingForInfo(channelID, info) {
 		return types.PriceData{}, false, nil
 	}
 
 	// 前置双重校验：能力匹配 + 分辨率档位匹配。
-	if err := validateImageModelPrice(c, channelID, info); err != nil {
-		return types.PriceData{}, false, err
+	if !independentTimePricing {
+		if err := validateImageModelPrice(c, channelID, info); err != nil {
+			return types.PriceData{}, false, err
+		}
 	}
 
 	names := imageModelNameCandidatesFromInfo(info)
@@ -287,6 +294,9 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 	}
 	estimateCtx := estimateImageRequestContext(c, info)
 	channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
+	if independentTimePricing {
+		channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch = resolveImagePerImageUnitUSDWithPayload(&timePricing.Payload, names, estimateCtx)
+	}
 	usdPerImage := channelUSD
 	okPrice := chOK
 	if !okPrice || usdPerImage <= 0 {
@@ -303,12 +313,36 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 	}
 	estimateCtx.Count = count
 
-	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx)
+	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx, timePricing, nil)
 	if !ok {
 		return types.PriceData{}, false, ImageModelPriceMatchError(c, channelID, info)
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 	info.PriceData = priceData
 	return priceData, true, nil
+}
+
+func resolveImagePerImageUnitUSDWithPayload(payload *model.ChannelModelPricePlanPayload, names []string, estimateCtx imageEstimateContext) (channelUSD, globalUSD float64, chOK, glOK bool, channelMatch, globalMatch *imagePerImagePriceMatch) {
+	if payload == nil {
+		return resolveImagePerImageUnitUSD(0, names, estimateCtx)
+	}
+	var channelRules ratio_setting.ImagePricingRules
+	channelHasRules := false
+	if payload.ImagePricingRules != nil {
+		channelRules = *payload.ImagePricingRules
+		channelHasRules = ratio_setting.HasUsableImagePerImageRules(channelRules)
+	}
+	channelFallback := 0.0
+	channelHasFallback := false
+	if payload.ImagePrice != nil && *payload.ImagePrice > 0 {
+		channelFallback = *payload.ImagePrice
+		channelHasFallback = true
+	}
+	globalRules, globalHasRules := resolveGlobalOnlyImagePricingRules(names)
+	globalFallback, globalHasFallback := resolveGlobalImageFlatUSD(names)
+	channelUSD, chOK, channelMatch = matchFlatPerImageUSDRules(estimateCtx, channelRules, channelHasRules, channelFallback, channelHasFallback)
+	globalUSD, glOK, globalMatch = matchFlatPerImageUSDRules(estimateCtx, globalRules, globalHasRules, globalFallback, globalHasFallback)
+	return channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch
 }
 
 // resolveImagePerImageUnitUSD 分别解析渠道规则价与全局规则价（不合并规则表）。
@@ -331,6 +365,8 @@ func buildImagePerImagePriceData(
 	channelMatch, globalMatch *imagePerImagePriceMatch,
 	fallbackUSD float64,
 	estimateCtx imageEstimateContext,
+	timePricing *model.ActiveChannelModelPricePlan,
+	billingSnapshot *types.PriceData,
 ) (types.PriceData, bool) {
 	if info == nil {
 		return types.PriceData{}, false
@@ -360,8 +396,13 @@ func buildImagePerImagePriceData(
 		}
 	}
 
-	rawDiscImg, operatingCostImg, chDiscImg := resolveChannelCostPercents(channelID)
-	markupDiscImg := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	rawDiscImg, operatingCostImg, chDiscImg, markupDiscImg := resolveChannelBillingPercents(c, info, channelID, info.OriginModelName, timePricing)
+	if billingSnapshot != nil && billingSnapshot.TimePricingPlanID > 0 {
+		rawDiscImg = billingSnapshot.RawPriceDiscountPercent
+		operatingCostImg = billingSnapshot.OperatingCostPercent
+		chDiscImg = billingSnapshot.CostDiscountPercent
+		markupDiscImg = billingSnapshot.MarkupDiscountPercent
+	}
 	channelRuleUSD := channelUSD
 	if !chOK || channelRuleUSD <= 0 {
 		channelRuleUSD = usdPerImage
@@ -436,6 +477,13 @@ func SyncImagePerImagePriceData(c *gin.Context, info *relaycommon.RelayInfo, est
 		names = imageModelNameCandidates(info.OriginModelName)
 	}
 	channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
+	if info.PriceData.TimePricingPlanID > 0 && strings.TrimSpace(info.PriceData.TimePricingPayload) != "" {
+		if payload, err := model.ParseChannelModelPricePlanPayload(info.PriceData.TimePricingPayload); err == nil {
+			if payload.ResolvedMode() == model.ChannelModelPricePlanModePrice {
+				channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch = resolveImagePerImageUnitUSDWithPayload(&payload, names, estimateCtx)
+			}
+		}
+	}
 	usdPerImage := channelUSD
 	okPrice := chOK
 	if !okPrice || usdPerImage <= 0 {
@@ -445,10 +493,12 @@ func SyncImagePerImagePriceData(c *gin.Context, info *relaycommon.RelayInfo, est
 	if !okPrice || usdPerImage <= 0 {
 		return false
 	}
-	pd, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx)
+	previousPriceData := info.PriceData
+	pd, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx, nil, &previousPriceData)
 	if !ok {
 		return false
 	}
+	copyChannelModelTimePricingSnapshot(&pd, previousPriceData)
 	info.PriceData = pd
 	return true
 }

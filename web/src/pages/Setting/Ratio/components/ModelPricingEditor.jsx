@@ -396,6 +396,8 @@ export default function ModelPricingEditor({
   listDescription = '',
   emptyTitle = '',
   emptyDescription = '',
+  includeAllCandidateModels = false,
+  onSelectedModelChange,
 }) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
@@ -460,7 +462,12 @@ export default function ModelPricingEditor({
     optionKeys,
     onSaveOutput,
     visibleCategories,
+    includeAllCandidateModels,
   });
+
+  useEffect(() => {
+    onSelectedModelChange?.(selectedModelName);
+  }, [onSelectedModelChange, selectedModelName]);
 
   const tierPriceDetails = useMemo(() => {
     if (!selectedModel?.tierPricing) return [];

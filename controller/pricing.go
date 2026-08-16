@@ -108,6 +108,7 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 			data[i].ChannelList[j].CacheRatio = 0
 			data[i].ChannelList[j].CreateCacheRatio = 0
 			data[i].ChannelList[j].RequestTierPricing = nil
+			data[i].ChannelList[j].TimePricing = nil
 			data[i].ChannelList[j].PriceDiscountPercent = 0
 			data[i].ChannelList[j].SupplierAlias = ""
 			data[i].ChannelList[j].CompanyLogoURL = ""

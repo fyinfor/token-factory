@@ -57,6 +57,9 @@ type videoTokenRuleMatch struct {
 	EffectivePricePerToken float64
 }
 
+// VideoTokenRuleMatch exposes the immutable match snapshot to relay helpers.
+type VideoTokenRuleMatch = videoTokenRuleMatch
+
 // resolveVideoPerTokenPricingRules 读取渠道/全局视频按 token 规则表。
 func resolveVideoPerTokenPricingRules(channelID int, modelName string) (ratio_setting.VideoPricingRules, bool) {
 	if rules, ok := ratio_setting.GetChannelVideoPricingRules(channelID, modelName); ok && ratio_setting.HasUsableVideoPerTokenRules(rules) {
@@ -132,6 +135,32 @@ func MatchVideoTokenRuleForRequest(channelID, userID int, modelName, mode string
 	}, true
 }
 
+// MatchVideoTokenRuleForPricingRules matches an explicit channel price-plan
+// snapshot. The official global rule remains the markup-side reference.
+func MatchVideoTokenRuleForPricingRules(rules ratio_setting.VideoPricingRules, modelName, mode string, width, height int, hasAudio bool, resolutionLabel string, costDisc, markupDisc float64) (*videoTokenRuleMatch, bool) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || width <= 0 || height <= 0 || !ratio_setting.HasUsableVideoPerTokenRules(rules) {
+		return nil, false
+	}
+	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio, resolutionLabel)
+	if !ok || match.PricePerSecond <= 0 {
+		return nil, false
+	}
+	globalPerToken := globalVideoPerTokenUSDForChannelTier(
+		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, hasAudio, match.UnifiedAudio,
+	)
+	effective := effectiveVideoPerSecondUSD(match.PricePerSecond, globalPerToken, costDisc, markupDisc)
+	if effective <= 0 {
+		return nil, false
+	}
+	return &videoTokenRuleMatch{
+		Mode: mode, Resolution: match.Resolution, RuleWidth: match.RuleWidth, RuleHeight: match.RuleHeight,
+		HasAudio: hasAudio, UnifiedAudio: match.UnifiedAudio,
+		ChannelPricePerToken: match.PricePerSecond, GlobalPricePerToken: globalPerToken,
+		EffectivePricePerToken: effective,
+	}, true
+}
+
 // ShouldUseVideoTokenBilling 是否对该模型启用视频按 token 规则计费（存在可用 per_token 表）。
 func ShouldUseVideoTokenBilling(channelID int, modelName string) bool {
 	_, ok := resolveVideoPerTokenPricingRules(channelID, modelName)
@@ -144,6 +173,25 @@ func CalcVideoTokenQuota(channelID, userID int, modelName, mode string, width, h
 		return 0, nil, false
 	}
 	match, ok := MatchVideoTokenRuleForRequest(channelID, userID, modelName, mode, width, height, hasAudio, resolutionLabel)
+	if !ok {
+		return 0, nil, false
+	}
+	if groupRatio <= 0 {
+		groupRatio = 1
+	}
+	rawQuota := (float64(totalTokens) / VideoTokenPricePerMillion) * match.EffectivePricePerToken * common.QuotaPerUnit * groupRatio
+	quota := int(math.Round(rawQuota))
+	if quota <= 0 && rawQuota > 0 {
+		quota = 1
+	}
+	return quota, match, true
+}
+
+func CalcVideoTokenQuotaWithPricingRules(rules ratio_setting.VideoPricingRules, modelName, mode string, width, height int, hasAudio bool, totalTokens int, groupRatio float64, resolutionLabel string, costDisc, markupDisc float64) (int, *videoTokenRuleMatch, bool) {
+	if totalTokens <= 0 {
+		return 0, nil, false
+	}
+	match, ok := MatchVideoTokenRuleForPricingRules(rules, modelName, mode, width, height, hasAudio, resolutionLabel, costDisc, markupDisc)
 	if !ok {
 		return 0, nil, false
 	}
@@ -189,7 +237,15 @@ func SettleSeedanceVideoTokenBillingOnComplete(ctx context.Context, task *model.
 		groupRatio = bc.GroupRatio
 	}
 
-	actualQuota, match, ok := CalcVideoTokenQuota(task.ChannelId, task.UserId, modelName, mode, width, height, hasAudio, totalTokens, groupRatio, resolutionLabel)
+	var actualQuota int
+	var match *videoTokenRuleMatch
+	var ok bool
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.TimePricingPlanID > 0 {
+		actualQuota = calcVideoTokenQuotaFromBillingContext(task, totalTokens)
+		ok = actualQuota > 0
+	} else {
+		actualQuota, match, ok = CalcVideoTokenQuota(task.ChannelId, task.UserId, modelName, mode, width, height, hasAudio, totalTokens, groupRatio, resolutionLabel)
+	}
 	if !ok || actualQuota <= 0 {
 		// 回退：用提交时快照单价结算，避免规则变更导致无法结算。
 		actualQuota = calcVideoTokenQuotaFromBillingContext(task, totalTokens)

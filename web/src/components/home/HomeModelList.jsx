@@ -283,6 +283,39 @@ const HomeModelList = () => {
           position: relative;
           z-index: 1;
         }
+        .home-model-time-pricing-pill {
+          position: relative;
+          display: inline-flex;
+          flex-shrink: 0;
+          align-items: center;
+          justify-content: center;
+          height: 24px;
+          padding: 0 10px;
+          overflow: hidden;
+          border: 1px solid rgba(99, 102, 241, 0.32);
+          border-radius: 999px;
+          background: linear-gradient(135deg, #06b6d4, #3b82f6 48%, #8b5cf6);
+          box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+          color: #fff;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0;
+          line-height: 24px;
+          white-space: nowrap;
+        }
+        .home-model-time-pricing-pill::before {
+          content: "";
+          position: absolute;
+          inset: -45% -80%;
+          background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.86) 50%, transparent 62%);
+          opacity: 0;
+          transform: translateX(-70%) rotate(8deg);
+          animation: home-model-time-pricing-pill-sheen 3.2s linear infinite;
+        }
+        .home-model-time-pricing-pill-text {
+          position: relative;
+          z-index: 1;
+        }
         .home-model-discount-tag {
           flex-shrink: 0;
           height: 24px;
@@ -509,6 +542,11 @@ const HomeModelList = () => {
           background: linear-gradient(135deg, #d97706, #ea580c 48%, #dc2626);
           box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
         }
+        html.dark .home-model-time-pricing-pill {
+          border-color: rgba(125, 211, 252, 0.24);
+          background: linear-gradient(135deg, #0891b2, #2563eb 48%, #7c3aed);
+          box-shadow: 0 8px 22px rgba(59, 130, 246, 0.14);
+        }
         html.dark .home-model-route-chip {
           background: linear-gradient(135deg, rgba(132, 204, 22, 0.16), rgba(14, 165, 233, 0.16));
         }
@@ -557,6 +595,21 @@ const HomeModelList = () => {
             transform: translateX(70%) rotate(8deg);
           }
         }
+        @keyframes home-model-time-pricing-pill-sheen {
+          0%,
+          46% {
+            opacity: 0;
+            transform: translateX(-70%) rotate(8deg);
+          }
+          58% {
+            opacity: 0.95;
+          }
+          76%,
+          100% {
+            opacity: 0;
+            transform: translateX(70%) rotate(8deg);
+          }
+        }
         @keyframes home-model-card-ribbon {
           0% {
             transform: rotate(0deg) scale(1);
@@ -599,6 +652,11 @@ const HomeModelList = () => {
         }
         @media (prefers-reduced-motion: reduce) {
           .home-model-hot-pill::before {
+            animation: none;
+            opacity: 0;
+            transform: none;
+          }
+          .home-model-time-pricing-pill::before {
             animation: none;
             opacity: 0;
             transform: none;

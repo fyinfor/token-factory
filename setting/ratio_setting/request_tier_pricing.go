@@ -361,6 +361,38 @@ func ResolveRequestTierHit(
 ) (RequestTierHit, bool) {
 	channelRule, hasChannel := GetChannelModelRequestTierPricing(channelID, model)
 	globalRule, hasGlobal := GetModelRequestTierPricing(model)
+	return resolveRequestTierHitFromRules(channelRule, hasChannel, globalRule, hasGlobal, inputTokens, costDiscPercent, markupDiscPercent, groupRatio)
+}
+
+// ResolveRequestTierHitWithRules calculates a tier hit from an explicit channel
+// plan snapshot while retaining the official global tier for the existing
+// effective-price formula. A nil channel rule means no scheduled tier pricing.
+func ResolveRequestTierHitWithRules(
+	channelRule *RequestTierPricing,
+	globalRule *RequestTierPricing,
+	inputTokens int64,
+	costDiscPercent, markupDiscPercent, groupRatio float64,
+) (RequestTierHit, bool) {
+	var channelValue, globalValue RequestTierPricing
+	hasChannel := channelRule != nil
+	hasGlobal := globalRule != nil
+	if hasChannel {
+		channelValue = *channelRule
+	}
+	if hasGlobal {
+		globalValue = *globalRule
+	}
+	return resolveRequestTierHitFromRules(channelValue, hasChannel, globalValue, hasGlobal, inputTokens, costDiscPercent, markupDiscPercent, groupRatio)
+}
+
+func resolveRequestTierHitFromRules(
+	channelRule RequestTierPricing,
+	hasChannel bool,
+	globalRule RequestTierPricing,
+	hasGlobal bool,
+	inputTokens int64,
+	costDiscPercent, markupDiscPercent, groupRatio float64,
+) (RequestTierHit, bool) {
 	if hasChannel && len(channelRule.Tiers) == 0 {
 		hasChannel = false
 	}
@@ -383,10 +415,10 @@ func ResolveRequestTierHit(
 	from, to := BandRangeFromIndex(bandRule.Tiers, idx)
 
 	hit := RequestTierHit{
-		FromToken: from,
-		ToToken:   to,
-		Boundary:  bandRule.Boundary,
-		Label:     BuildRequestTierLabel("输入", bandRule.Tiers, inputTokens, bandRule.Boundary),
+		FromToken:  from,
+		ToToken:    to,
+		Boundary:   bandRule.Boundary,
+		Label:      BuildRequestTierLabel("输入", bandRule.Tiers, inputTokens, bandRule.Boundary),
 		HasChannel: hasChannel,
 		HasGlobal:  hasGlobal,
 	}

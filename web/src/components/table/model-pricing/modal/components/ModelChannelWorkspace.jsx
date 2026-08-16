@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
-import { IconArticle } from '@douyinfe/semi-icons';
+import { IconArticle, IconCalendarClock } from '@douyinfe/semi-icons';
 
 import {
   computeChannelBillingRates,
@@ -38,6 +38,7 @@ import {
   findTierPriceAtBand,
   getRequestTierPricing,
 } from '../../view/card/tierUtils';
+import TierPriceMatrix from '../../components/TierPriceMatrix';
 import ModelChannelList from './ModelChannelList';
 import ModelEndpoints from './ModelEndpoints';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
@@ -125,6 +126,12 @@ const ChannelStabilitySignal = ({ row, t }) => {
 const ChannelHotPill = ({ t }) => (
   <span className='channel-hot-pill' title={t('热门')}>
     <span className='channel-hot-pill-text'>{t('热门')}</span>
+  </span>
+);
+
+const ChannelTimePricingPill = ({ t }) => (
+  <span className='channel-time-pricing-pill' title={t('分时计费')}>
+    <span className='channel-time-pricing-pill-text'>{t('分时计费')}</span>
   </span>
 );
 
@@ -501,6 +508,181 @@ const getChannelPriceSummary = ({
   return buildChannelPriceSummary(rows, extraDiscounts);
 };
 
+const TIME_PRICING_WEEKDAYS = [
+  { value: 1, label: '周一' },
+  { value: 2, label: '周二' },
+  { value: 3, label: '周三' },
+  { value: 4, label: '周四' },
+  { value: 5, label: '周五' },
+  { value: 6, label: '周六' },
+  { value: 0, label: '周日' },
+];
+
+const formatScheduleWeekdays = (mask, t) => {
+  const numericMask = Number(mask || 0);
+  if (numericMask === 0x7f) return t('每天');
+  if (numericMask === 0x3e) return t('工作日');
+  return TIME_PRICING_WEEKDAYS.filter(
+    (item) => (numericMask & (1 << item.value)) !== 0,
+  )
+    .map((item) => item.label)
+    .join('、');
+};
+
+const formatScheduleMinute = (minute) => {
+  const normalized = Math.max(0, Math.min(1440, Number(minute) || 0));
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+const buildTimePricingChannel = (channel, pricing, rates) => ({
+  ...channel,
+  model_price: pricing?.model_price,
+  model_ratio: pricing?.model_ratio,
+  completion_ratio: pricing?.completion_ratio,
+  cache_ratio: pricing?.cache_ratio,
+  create_cache_ratio: pricing?.create_cache_ratio,
+  request_tier_pricing: pricing?.request_tier_pricing,
+  quota_type: pricing?.quota_type,
+  price_discount_percent:
+    rates?.effective_cost_percent ?? channel?.price_discount_percent,
+  raw_price_discount_percent:
+    rates?.price_discount_percent ?? channel?.raw_price_discount_percent,
+  operating_cost_percent:
+    rates?.operating_cost_percent ?? channel?.operating_cost_percent,
+  markup_discount_rate:
+    rates?.markup_discount_rate ?? channel?.markup_discount_rate,
+  video_flat_clip_hint: pricing?.video_flat_clip_hint,
+  image_per_image_hint: pricing?.image_per_image_hint,
+});
+
+const ChannelTimePricingDetails = ({
+  channel,
+  modelData,
+  selectedGroup,
+  groupRatio,
+  displayPrice,
+  tokenUnit,
+  t,
+}) => {
+  const timePricing = channel?.time_pricing;
+  const schedules = Array.isArray(timePricing?.schedules)
+    ? timePricing.schedules
+    : [];
+  if (!timePricing?.has_schedules || schedules.length === 0) return null;
+
+  const buildPriceSummary = (pricing, rates) =>
+    getChannelPriceSummary({
+      channel: buildTimePricingChannel(channel, pricing, rates),
+      modelData,
+      selectedGroup,
+      groupRatio,
+      displayPrice,
+      tokenUnit,
+      t,
+    });
+
+  const tableRows = [
+    {
+      key: 'regular',
+      name: t('渠道常规价'),
+      periodTitle: t('渠道常规价'),
+      active: !timePricing.active,
+      priceSummary: buildPriceSummary(
+        timePricing.regular_pricing,
+        timePricing.regular_rates,
+      ),
+    },
+    ...schedules.map((schedule) => ({
+      key: `schedule-${schedule.id}`,
+      name: schedule.name,
+      periodTitle: [
+        `${formatScheduleWeekdays(schedule.weekdays, t)} · ${formatScheduleMinute(schedule.start_minute)}–${formatScheduleMinute(schedule.end_minute)}`,
+        schedule.effective_from || schedule.effective_to
+          ? `${schedule.effective_from || '—'} ~ ${schedule.effective_to || '—'}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      active: schedule.active,
+      priceSummary: buildPriceSummary(schedule.pricing, schedule.rates),
+    })),
+  ];
+  const priceTableColumns = [
+    { key: 'label', label: t('价格信息') },
+    { key: 'value', label: t('价格表'), strong: true },
+  ];
+
+  return (
+    <div className='channel-time-pricing-panel rounded-lg border p-3'>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div className='flex min-w-0 items-start gap-2'>
+          <span className='channel-time-pricing-panel-icon' aria-hidden='true'>
+            <IconCalendarClock size={16} />
+          </span>
+          <div className='min-w-0'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Text strong className='text-sm'>
+                {t('分时定价')}
+              </Text>
+            </div>
+            <Text type='tertiary' size='small'>
+              {timePricing.timezone || 'Asia/Shanghai'}
+            </Text>
+          </div>
+        </div>
+        <ChannelTimePricingPill t={t} />
+      </div>
+
+      <div className='channel-time-pricing-period-list mt-3 grid gap-3'>
+        {tableRows.map((row) => {
+          const priceRows = row.priceSummary.rows.length
+            ? row.priceSummary.rows.map((price) => ({
+                key: price.key,
+                label: price.label,
+                value: price.value,
+              }))
+            : [
+                {
+                  key: 'unconfigured',
+                  label: t('价格'),
+                  value: t('价格待配置'),
+                },
+              ];
+          return (
+            <div
+              key={row.key}
+              className='channel-time-pricing-period-card rounded-xl border p-2.5'
+            >
+              <div className='mb-2 flex flex-wrap items-start justify-between gap-2 px-1'>
+                <div className='flex min-w-0 flex-wrap items-center gap-2'>
+                  <Text strong className='truncate text-sm'>
+                    {row.name}
+                  </Text>
+                  {row.active ? (
+                    <Tag color='green' size='small' shape='circle'>
+                      {t('当前生效')}
+                    </Tag>
+                  ) : null}
+                </div>
+              </div>
+              <TierPriceMatrix
+                title={row.periodTitle}
+                columns={priceTableColumns}
+                rows={priceRows}
+                gridTemplateColumns='minmax(108px, 0.8fr) minmax(150px, 1.2fr)'
+                variant='glass'
+                t={t}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const ModelChannelWorkspace = ({
   modelData,
   channelMtrMap = {},
@@ -608,6 +790,8 @@ const ModelChannelWorkspace = ({
               priceSummary.bestDiscount,
               t,
             );
+            const hasTimePricing =
+              channel?.time_pricing?.has_schedules === true;
             return (
               <button
                 key={key}
@@ -644,6 +828,11 @@ const ModelChannelWorkspace = ({
                   </div>
                 </div>
                 <div className='channel-selector-divider my-3 border-t border-dashed' />
+                {hasTimePricing ? (
+                  <div className='mb-2 flex flex-wrap items-center gap-1.5'>
+                    <ChannelTimePricingPill t={t} />
+                  </div>
+                ) : null}
                 <div className='space-y-1.5'>
                   {priceRows.length > 0 ? (
                     priceRows.map((price) => (
@@ -714,6 +903,15 @@ const ModelChannelWorkspace = ({
           endpointMap={endpointMap}
           t={t}
           flat
+        />
+        <ChannelTimePricingDetails
+          channel={selectedEntry.channel}
+          modelData={selectedModelData}
+          selectedGroup={props.selectedGroup}
+          groupRatio={props.groupRatio}
+          displayPrice={props.displayPrice}
+          tokenUnit={props.tokenUnit}
+          t={t}
         />
         <ModelChannelList
           {...props}

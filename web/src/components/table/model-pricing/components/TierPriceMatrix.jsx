@@ -58,14 +58,16 @@ function TierPriceMatrix({
   columns,
   rows,
   gridType = 'image',
+  gridTemplateColumns,
   accent = 'blue',
   variant = 'default',
   t,
 }) {
-  const gridTemplateColumns =
-    typeof gridType === 'string'
+  const resolvedGridTemplateColumns =
+    gridTemplateColumns ||
+    (typeof gridType === 'string'
       ? PRICE_GRID_COLUMNS[gridType] || PRICE_GRID_COLUMNS.image
-      : gridType;
+      : gridType);
   const accentColor =
     accent === 'amber'
       ? 'rgb(255, 149, 0)'
@@ -143,7 +145,7 @@ function TierPriceMatrix({
             : 'mx-2 mb-1 mt-1 grid items-center gap-2 rounded-full px-2 py-1.5 text-[11px] font-semibold'
         }
         style={{
-          gridTemplateColumns,
+          gridTemplateColumns: resolvedGridTemplateColumns,
           ...(isGlassTable
             ? { color: 'var(--semi-color-text-2)' }
             : {
@@ -173,7 +175,7 @@ function TierPriceMatrix({
               : 'mx-2 grid items-center gap-2 px-2 py-2.5 text-xs'
           }
           style={{
-            gridTemplateColumns,
+            gridTemplateColumns: resolvedGridTemplateColumns,
             ...(isGlassTable || idx === 0
               ? undefined
               : { borderTop: '1px solid var(--semi-color-border)' }),
@@ -220,7 +222,7 @@ function TierPriceMatrix({
             return (
               <span
                 key={column.key}
-                className={`${column.strong ? 'font-semibold' : 'text-semi-color-text-1'} truncate`}
+                className={`${column.strong ? 'font-semibold' : 'text-semi-color-text-1'} ${column.align === 'right' ? 'text-right' : ''} truncate`}
                 style={column.strong ? priceTextStyle : undefined}
                 title={typeof value === 'string' ? value : undefined}
               >
