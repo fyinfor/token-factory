@@ -378,10 +378,26 @@ const HomeModelList = () => {
           color: var(--semi-color-text-0);
         }
         .home-model-description-slot {
-          flex: 1 1 0;
-          min-height: 0;
+          flex: 1 1 36px;
+          min-height: 36px;
           margin-top: 0.75rem;
           overflow: hidden;
+        }
+        .home-model-description-trigger {
+          display: block;
+          width: 100%;
+          height: 100%;
+          padding: 0;
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .home-model-description-trigger:focus-visible {
+          outline: 2px solid var(--semi-color-primary);
+          outline-offset: 3px;
         }
         .home-model-description {
           display: -webkit-box;
@@ -1121,6 +1137,8 @@ const HomeModelList = () => {
         visible={pricingData.showModelDetail}
         onClose={pricingData.closeModelDetail}
         modelData={pricingData.selectedModel}
+        activeSection={pricingData.modelDetailSection}
+        onActiveSectionChange={pricingData.setModelDetailSection}
         groupRatio={pricingData.groupRatio}
         groupModelPrice={pricingData.groupModelPrice}
         groupModelRatio={pricingData.groupModelRatio}

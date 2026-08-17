@@ -78,6 +78,8 @@ const ModelDetailSideSheet = ({
   visible,
   onClose,
   modelData,
+  activeSection = 'general',
+  onActiveSectionChange,
   groupRatio,
   currency,
   siteDisplayType,
@@ -104,7 +106,6 @@ const ModelDetailSideSheet = ({
   hotChannelScoreMap = new Map(),
 }) => {
   const isMobile = useIsMobile();
-  const [activeSection, setActiveSection] = useState('general');
   const [channelMtrMap, setChannelMtrMap] = useState({});
   const [contentReady, setContentReady] = useState(false);
   const sideSheetDisplayPrice = useCallback(
@@ -115,7 +116,6 @@ const ModelDetailSideSheet = ({
 
   useEffect(() => {
     if (!visible) {
-      setActiveSection('general');
       setContentReady(false);
     }
   }, [visible, modelData?.model_name]);
@@ -231,7 +231,7 @@ const ModelDetailSideSheet = ({
       ) : (
         <Tabs
           activeKey={activeSection}
-          onChange={setActiveSection}
+          onChange={onActiveSectionChange}
           type='button'
           className='model-detail-tabs flex min-h-0 flex-1 flex-col'
           contentStyle={{ minHeight: 0, flex: 1, overflow: 'hidden' }}
