@@ -39,7 +39,9 @@ const (
 	// where baseUrl is typically https://api.minimaxi.com/v2.
 	EndpointTypeMiniMaxH3Video EndpointType = "minimax-h3-video"
 	// EndpointTypeAliASRSync is Alibaba DashScope ASR sync transcription.
-	// Client entry: POST /v1/audio/transcriptions; upstream: multimodal-generation.
+	// Client entry: POST /v1/audio/transcriptions.
+	// AliASRSync channel: upstream multimodal-generation.
+	// AliASRAsync channel: same client path, internally async submit + poll then return the result.
 	EndpointTypeAliASRSync EndpointType = "ali-asr-sync"
 	// EndpointTypeAliASRAsync is Alibaba DashScope ASR async file transcription.
 	// Client entry: POST /v1/audio/transcriptions/async; upstream: asr/transcription + tasks poll.

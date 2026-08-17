@@ -79,36 +79,92 @@ func firstASRMultipartFormValue(form *multipart.Form, keys ...string) string {
 // 计费：提交时预扣 60 秒费用；成功取结果后按 usage.duration 补差价；失败退还预扣。
 // 提交后由后台 AsrTaskPollingLoop 定时轮询上游并结算写日志，无需用户主动查询。
 func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASRTaskSubmitRequest, proxy string) *types.TokenFactoryError {
+	task, tfErr := createASRAsyncTask(c, info, request, proxy)
+	if tfErr != nil {
+		return tfErr
+	}
+	c.JSON(http.StatusOK, dto.ASRTaskSubmitResponse{
+		TaskID:    task.TaskID,
+		Status:    task.Status,
+		Model:     task.Model,
+		CreatedAt: task.CreatedAt,
+	})
+	return nil
+}
+
+// SubmitASRTaskAndWait POST /v1/audio/transcriptions 命中阿里云 ASR 异步渠道时：
+// 上游入参与异步提交一致，网关内部轮询任务状态，完成后按同步口径返回识别结果。
+func SubmitASRTaskAndWait(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASRTaskSubmitRequest, proxy string) *types.TokenFactoryError {
+	task, tfErr := createASRAsyncTask(c, info, request, proxy)
+	if tfErr != nil {
+		return tfErr
+	}
+	c.Header("X-ASR-Task-Id", task.TaskID)
+
+	responseFormat := ""
+	if request != nil {
+		responseFormat = request.ResponseFormat
+	}
+	result, waitErr := waitForASRTask(c.Request.Context(), task, asrWaitOptions{
+		Timeout:  aliyunasr.AsyncSyncWaitTimeout,
+		Interval: aliyunasr.AsyncSyncWaitInterval,
+		Poll:     pollAndSettleASRTask,
+		Reload:   model.GetAsrTaskByTaskID,
+	})
+	if waitErr != nil {
+		if errors.Is(waitErr, errASRSyncWaitCancelled) {
+			logger.LogWarn(c, fmt.Sprintf("ASR 同步等待已取消，任务继续后台处理: %s", task.TaskID))
+			return nil
+		}
+		if errors.Is(waitErr, errASRSyncWaitTimeout) {
+			return types.NewErrorWithStatusCode(
+				fmt.Errorf("转写等待超时（%s），任务仍在后台处理，可通过 GET /v1/audio/transcriptions/async/%s 查询结果",
+					aliyunasr.AsyncSyncWaitTimeout, task.TaskID),
+				types.ErrorCodeBadResponse, http.StatusGatewayTimeout, types.ErrOptionWithSkipRetry())
+		}
+		msg := waitErr.Error()
+		if result != nil && strings.TrimSpace(result.FailReason) != "" {
+			msg = result.FailReason
+		}
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("转写失败: %s", msg),
+			types.ErrorCodeBadResponse, http.StatusBadGateway, types.ErrOptionWithSkipRetry())
+	}
+	writeASRSyncWaitResponse(c, result, responseFormat)
+	return nil
+}
+
+func createASRAsyncTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASRTaskSubmitRequest, proxy string) (*model.AsrTask, *types.TokenFactoryError) {
 	info.InitChannelMeta(c)
 
 	if info.ChannelType != constant.ChannelTypeAliASRAsync {
-		return types.NewErrorWithStatusCode(
+		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("模型 %s 未配置阿里云 ASR 异步渠道（当前渠道类型 %d），请在渠道管理中为异步转写模型配置对应渠道", info.OriginModelName, info.ChannelType),
 			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 
 	fileURL, resolveErr := resolveASRAsyncAudioURL(c, request)
 	if resolveErr != nil {
-		return types.NewErrorWithStatusCode(
+		return nil, types.NewErrorWithStatusCode(
 			resolveErr,
 			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 
 	if err := helper.ModelMappedHelper(c, info, request); err != nil {
-		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+		return nil, types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
 
 	priceData, err := helper.ModelPriceHelperASR(c, info, aliyunasr.AsyncPreConsumeSeconds)
 	if err != nil {
-		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		return nil, types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
 	}
 	priceDataSnapshot, err := common.Marshal(priceData)
 	if err != nil {
-		return types.NewError(fmt.Errorf("保存 ASR 提交价格快照失败: %w", err), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		return nil, types.NewError(fmt.Errorf("保存 ASR 提交价格快照失败: %w", err), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
 	}
 
 	if strings.TrimSpace(info.ChannelBaseUrl) == "" {
-		return types.NewErrorWithStatusCode(
+		return nil, types.NewErrorWithStatusCode(
 			errors.New("阿里云 ASR 渠道未配置上游基础地址（Base URL），请联系管理员"),
 			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
@@ -117,7 +173,7 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 	if info.Billing == nil && !priceData.FreeModel && priceData.QuotaToPreConsume > 0 {
 		info.ForcePreConsume = true
 		if tfErr := service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info); tfErr != nil {
-			return tfErr
+			return nil, tfErr
 		}
 	}
 	preConsumed := 0
@@ -140,7 +196,7 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 		aliyunasr.BuildAsyncSubmitParameters(request.DiarizationEnabled.BoolPtr()),
 	)
 	if err != nil {
-		return types.NewErrorWithStatusCode(
+		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("异步任务提交失败: %w", err),
 			types.ErrorCodeDoRequestFailed, http.StatusBadGateway)
 	}
@@ -161,7 +217,7 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 		task.Status = dto.ASRTaskStatusRunning
 	}
 	if err := task.Insert(); err != nil {
-		return types.NewError(fmt.Errorf("保存异步任务失败: %w, 上游响应: %s", err, string(rawBody)), types.ErrorCodeInvalidRequest)
+		return nil, types.NewError(fmt.Errorf("保存异步任务失败: %w, 上游响应: %s", err, string(rawBody)), types.ErrorCodeInvalidRequest)
 	}
 
 	// 提交成功：取消 defer 退款（预扣保留至结果结算），并写入预扣使用日志
@@ -178,14 +234,81 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 		_ = model.DB.Model(&model.AsrTask{}).Where("id = ?", task.ID).
 			Updates(map[string]any{"quota_logged": preConsumed, "updated_at": time.Now().Unix()}).Error
 	}
+	return task, nil
+}
 
-	c.JSON(http.StatusOK, dto.ASRTaskSubmitResponse{
-		TaskID:    task.TaskID,
-		Status:    task.Status,
-		Model:     task.Model,
-		CreatedAt: task.CreatedAt,
-	})
-	return nil
+var (
+	errASRSyncWaitCancelled = errors.New("asr sync wait cancelled")
+	errASRSyncWaitTimeout   = errors.New("asr sync wait timeout")
+)
+
+type asrWaitOptions struct {
+	Timeout  time.Duration
+	Interval time.Duration
+	Poll     func(ctx context.Context, task *model.AsrTask) error
+	Reload   func(taskID string, userID int) (*model.AsrTask, error)
+}
+
+// waitForASRTask 轮询任务直至成功/失败，或等待超时/上下文取消。
+// 超时与取消不把任务标为失败，后台 AsrTaskPollingLoop 会继续推进。
+func waitForASRTask(ctx context.Context, task *model.AsrTask, opts asrWaitOptions) (*model.AsrTask, error) {
+	if task == nil {
+		return nil, errors.New("asr task is nil")
+	}
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = aliyunasr.AsyncSyncWaitTimeout
+	}
+	interval := opts.Interval
+	if interval <= 0 {
+		interval = aliyunasr.AsyncSyncWaitInterval
+	}
+	deadline := time.Now().Add(timeout)
+
+	for {
+		if ctx != nil && ctx.Err() != nil {
+			return task, errASRSyncWaitCancelled
+		}
+		if opts.Poll != nil {
+			if err := opts.Poll(ctx, task); err != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("asr sync wait poll task %s: %v", task.TaskID, err))
+			}
+		}
+		if opts.Reload != nil {
+			if refreshed, err := opts.Reload(task.TaskID, task.UserID); err == nil && refreshed != nil {
+				task = refreshed
+			}
+		}
+		switch task.Status {
+		case dto.ASRTaskStatusSucceeded:
+			return task, nil
+		case dto.ASRTaskStatusFailed:
+			reason := strings.TrimSpace(task.FailReason)
+			if reason == "" {
+				reason = "upstream task failed"
+			}
+			return task, fmt.Errorf("%s", reason)
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return task, errASRSyncWaitTimeout
+		}
+		wait := interval
+		if wait > remaining {
+			wait = remaining
+		}
+		timer := time.NewTimer(wait)
+		var ctxDone <-chan struct{}
+		if ctx != nil {
+			ctxDone = ctx.Done()
+		}
+		select {
+		case <-ctxDone:
+			timer.Stop()
+			return task, errASRSyncWaitCancelled
+		case <-timer.C:
+		}
+	}
 }
 
 // FetchASRTaskResult 查询异步转写任务结果（GET /v1/audio/transcriptions/async/{task_id}）。
@@ -528,6 +651,29 @@ func writeASRFetchResponse(c *gin.Context, task *model.AsrTask, errMsg string) {
 		Error:      errMsg,
 		CreatedAt:  task.CreatedAt,
 		FinishedAt: task.FinishedAt,
+	}
+	if raw := strings.TrimSpace(task.ResultTranscripts); raw != "" {
+		var transcripts []dto.ASRTranscript
+		if err := common.UnmarshalJsonStr(raw, &transcripts); err == nil && len(transcripts) > 0 {
+			resp.Transcripts = transcripts
+		}
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func writeASRSyncWaitResponse(c *gin.Context, task *model.AsrTask, responseFormat string) {
+	if task == nil {
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(responseFormat), "text") {
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+		c.String(http.StatusOK, task.ResultText)
+		return
+	}
+	resp := dto.ASRSyncResponse{
+		Text:     task.ResultText,
+		Duration: task.AudioSeconds,
+		TaskID:   task.TaskID,
 	}
 	if raw := strings.TrimSpace(task.ResultTranscripts); raw != "" {
 		var transcripts []dto.ASRTranscript

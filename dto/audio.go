@@ -86,15 +86,16 @@ type Segment struct {
 // ============================== ASR 异步转录（OpenAI 兼容） ==============================
 
 // ASRTaskSubmitRequest POST /v1/audio/transcriptions/async 提交异步转录任务请求体。
+// 同步等待入口 POST /v1/audio/transcriptions 命中阿里云 ASR 异步渠道时复用同一请求体。
 // 异步链路（filetrans）上游要求公网可访问的音频 URL：
 // 可直接传 audio_url/file_url，或 multipart file（网关先上传到操练场附件库再取在线地址）。
 // 支持 multipart 表单字段（model/audio_url/file）或 JSON body。
 type ASRTaskSubmitRequest struct {
-	Model                string `json:"model"`
-	AudioURL             string `json:"audio_url"`
-	FileURL              string `json:"file_url"`
-	Language             string `json:"language,omitempty"`
-	ResponseFormat       string `json:"response_format,omitempty"`
+	Model          string `json:"model"`
+	AudioURL       string `json:"audio_url"`
+	FileURL        string `json:"file_url"`
+	Language       string `json:"language,omitempty"`
+	ResponseFormat string `json:"response_format,omitempty"`
 	// DiarizationEnabled 说话人分离；兼容 JSON bool 与 multipart/form 字符串（"true"/"false"）。
 	DiarizationEnabled *BoolValue `json:"diarization_enabled,omitempty"`
 }
@@ -151,16 +152,25 @@ type ASRTranscript struct {
 	Sentences []ASRTranscriptSentence `json:"sentences"`
 }
 
+// ASRSyncResponse POST /v1/audio/transcriptions 在阿里云 ASR 异步渠道上的同步等待响应。
+// 网关内部提交异步任务并轮询至完成后，按同步转写口径返回识别文本。
+type ASRSyncResponse struct {
+	Text        string          `json:"text"`
+	Duration    float64         `json:"duration,omitempty"`
+	Transcripts []ASRTranscript `json:"transcripts,omitempty"`
+	TaskID      string          `json:"task_id,omitempty"`
+}
+
 // ASRTaskFetchResponse GET /v1/audio/transcriptions/async/{task_id} 查询响应。
 // 任务成功后 text/duration 有值；启用说话人分离时 transcripts 含逐句 speaker_id；失败时 error 有值。
 type ASRTaskFetchResponse struct {
-	TaskID      string            `json:"task_id"`
-	Status      string            `json:"status"`
-	Model       string            `json:"model"`
-	Text        string            `json:"text,omitempty"`
-	Duration    float64           `json:"duration,omitempty"`
-	Transcripts []ASRTranscript   `json:"transcripts,omitempty"`
-	Error       string            `json:"error,omitempty"`
-	CreatedAt   int64             `json:"created_at"`
-	FinishedAt  int64             `json:"finished_at,omitempty"`
+	TaskID      string          `json:"task_id"`
+	Status      string          `json:"status"`
+	Model       string          `json:"model"`
+	Text        string          `json:"text,omitempty"`
+	Duration    float64         `json:"duration,omitempty"`
+	Transcripts []ASRTranscript `json:"transcripts,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	CreatedAt   int64           `json:"created_at"`
+	FinishedAt  int64           `json:"finished_at,omitempty"`
 }

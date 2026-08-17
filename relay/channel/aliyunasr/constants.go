@@ -3,6 +3,7 @@ package aliyunasr
 import (
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // 阿里云百炼（DashScope）ASR 语音转写渠道。
@@ -48,6 +49,11 @@ const (
 	audioTokensPerSecond = 25.0
 	// AsyncPreConsumeSeconds 异步转写提交时预扣的音频时长（秒），成功后按 usage.duration 补差价。
 	AsyncPreConsumeSeconds = 60
+	// AsyncSyncWaitTimeout POST /v1/audio/transcriptions 命中异步渠道时，后端轮询上游任务的最长时间。
+	// 超时后任务仍由后台 AsrTaskPollingLoop 继续推进，客户端可用 task_id 走异步查询接口取结果。
+	AsyncSyncWaitTimeout = 10 * time.Minute
+	// AsyncSyncWaitInterval 同步等待期间查询上游任务状态的间隔。
+	AsyncSyncWaitInterval = 2 * time.Second
 )
 
 // UsesFunASRFlashSyncProtocol 判断同步链路是否使用 Fun-ASR / Qwen-Audio 协议：

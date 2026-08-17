@@ -18,6 +18,20 @@ func TestModelTagsContain(t *testing.T) {
 	}
 }
 
+func TestGetEndpointTypesByChannelTypeForAliASR(t *testing.T) {
+	syncTypes := GetEndpointTypesByChannelType(constant.ChannelTypeAliASRSync, "qwen3-asr-flash")
+	if len(syncTypes) != 1 || syncTypes[0] != constant.EndpointTypeAliASRSync {
+		t.Fatalf("AliASRSync endpoints = %v", syncTypes)
+	}
+
+	asyncTypes := GetEndpointTypesByChannelType(constant.ChannelTypeAliASRAsync, "qwen3-asr-flash-filetrans")
+	if len(asyncTypes) != 2 ||
+		asyncTypes[0] != constant.EndpointTypeAliASRAsync ||
+		asyncTypes[1] != constant.EndpointTypeAliASRSync {
+		t.Fatalf("AliASRAsync should expose async submit and sync wait endpoints, got %v", asyncTypes)
+	}
+}
+
 func TestTokenFactoryOpenEndpointTypesByTag(t *testing.T) {
 	textOnly := GetEndpointTypesByChannelTypeWithTags(
 		constant.ChannelTypeTokenFactoryOpen,
