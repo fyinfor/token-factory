@@ -112,10 +112,18 @@ const CARD_STYLES = {
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const HOME_MODEL_DESCRIPTION_LINE_HEIGHT = 18;
+const HOME_MODEL_DESCRIPTION_MIN_LINES = 2;
 
-const AdaptiveModelDescription = ({ children, style }) => {
+const AdaptiveModelDescription = ({ children, style, onClick, ariaLabel }) => {
   const slotRef = React.useRef(null);
-  const [lineCount, setLineCount] = React.useState(0);
+  const [lineCount, setLineCount] = React.useState(
+    HOME_MODEL_DESCRIPTION_MIN_LINES,
+  );
+
+  const handleClick = (event) => {
+    event.stopPropagation();
+    onClick?.();
+  };
 
   React.useLayoutEffect(() => {
     const slot = slotRef.current;
@@ -124,7 +132,7 @@ const AdaptiveModelDescription = ({ children, style }) => {
     const updateLineCount = () => {
       const availableHeight = slot.getBoundingClientRect().height;
       const nextLineCount = Math.max(
-        0,
+        HOME_MODEL_DESCRIPTION_MIN_LINES,
         Math.floor(availableHeight / HOME_MODEL_DESCRIPTION_LINE_HEIGHT),
       );
       setLineCount((current) =>
@@ -134,7 +142,6 @@ const AdaptiveModelDescription = ({ children, style }) => {
 
     updateLineCount();
     if (typeof ResizeObserver === 'undefined') {
-      setLineCount(1);
       return undefined;
     }
 
@@ -145,17 +152,22 @@ const AdaptiveModelDescription = ({ children, style }) => {
 
   return (
     <div ref={slotRef} className='home-model-description-slot' style={style}>
-      {lineCount > 0 ? (
-        <p
-          className='home-model-description m-0'
+      <button
+        type='button'
+        className='home-model-description-trigger'
+        onClick={handleClick}
+        aria-label={ariaLabel}
+      >
+        <span
+          className='home-model-description'
           style={{
             maxHeight: lineCount * HOME_MODEL_DESCRIPTION_LINE_HEIGHT,
             WebkitLineClamp: lineCount,
           }}
         >
           {children}
-        </p>
-      ) : null}
+        </span>
+      </button>
     </div>
   );
 };
@@ -2421,6 +2433,12 @@ const PricingCardView = ({
       }
     };
 
+    const openBasicInfo = () => {
+      if (!blurPricing && openModelDetail) {
+        openModelDetail(model, 'basic');
+      }
+    };
+
     return (
       <Card
         key={modelKey || index}
@@ -2543,7 +2561,11 @@ const PricingCardView = ({
           </div>
 
           {modelDescription ? (
-            <AdaptiveModelDescription style={pricingBlurStyle}>
+            <AdaptiveModelDescription
+              style={pricingBlurStyle}
+              onClick={openBasicInfo}
+              ariaLabel={`${t('点击查看')} ${t('基本信息')}`}
+            >
               {renderHighlightedText(modelDescription)}
             </AdaptiveModelDescription>
           ) : null}
