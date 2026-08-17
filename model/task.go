@@ -132,14 +132,14 @@ const (
 
 // TaskVideoUpscaleInfo 视频超分上下文：记录命中的渠道规则与 MPS 任务进度。
 type TaskVideoUpscaleInfo struct {
-	SourceResolution string  `json:"source_resolution"`          // 生成分辨率（实际生成档位）
-	TargetResolution string  `json:"target_resolution"`          // 超分分辨率（对外输出档位）
-	TemplateId       uint64  `json:"template_id"`                // MPS 超分模版 ID
-	MpsTaskId        string  `json:"mps_task_id,omitempty"`      // MPS 任务 ID（提交后回填）
-	Status           string  `json:"status,omitempty"`           // pending/processing/success/failed
-	OutputUrl        string  `json:"output_url,omitempty"`       // 超分后视频 URL（完成后回填）
-	DurationSec      float64 `json:"duration_sec,omitempty"`     // 超分后视频时长（秒，计费用）
-	FailReason       string  `json:"fail_reason,omitempty"`      // 超分失败原因
+	SourceResolution string  `json:"source_resolution"`      // 生成分辨率（实际生成档位）
+	TargetResolution string  `json:"target_resolution"`      // 超分分辨率（对外输出档位）
+	TemplateId       uint64  `json:"template_id"`            // MPS 超分模版 ID
+	MpsTaskId        string  `json:"mps_task_id,omitempty"`  // MPS 任务 ID（提交后回填）
+	Status           string  `json:"status,omitempty"`       // pending/processing/success/failed
+	OutputUrl        string  `json:"output_url,omitempty"`   // 超分后视频 URL（完成后回填）
+	DurationSec      float64 `json:"duration_sec,omitempty"` // 超分后视频时长（秒，计费用）
+	FailReason       string  `json:"fail_reason,omitempty"`  // 超分失败原因
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
@@ -389,12 +389,23 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 		}
 	}
 
-	// 使用预生成的公开 ID（如果有），否则新生成
+	// 使用预生成的公开 ID（如果有），否则按渠道规则新生成。
+	// Seedance 2.0：通用 task_xxxx 转为火山标准 cgt-{yyyyMMddHHmmss}-{rand}。
 	taskID := ""
+	channelType := 0
+	if relayInfo != nil && relayInfo.ChannelMeta != nil {
+		channelType = relayInfo.ChannelType
+	}
 	if relayInfo.TaskRelayInfo != nil && relayInfo.TaskRelayInfo.PublicTaskID != "" {
 		taskID = relayInfo.TaskRelayInfo.PublicTaskID
+		if channelType == constant.ChannelTypeSeedance {
+			taskID = ConvertToVolcEngineVideoTaskID(taskID, time.Now())
+		}
 	} else {
-		taskID = GenerateTaskID()
+		taskID = GeneratePublicTaskID(channelType)
+	}
+	if relayInfo.TaskRelayInfo != nil {
+		relayInfo.TaskRelayInfo.PublicTaskID = taskID
 	}
 
 	t := &Task{
