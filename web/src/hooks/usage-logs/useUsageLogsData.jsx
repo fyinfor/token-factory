@@ -72,6 +72,58 @@ const buildLogTypeQueryParam = (logType) => {
   return types.join(',');
 };
 
+const TIME_PRICING_WEEKDAYS = [
+  { value: 1, label: '周一' },
+  { value: 2, label: '周二' },
+  { value: 3, label: '周三' },
+  { value: 4, label: '周四' },
+  { value: 5, label: '周五' },
+  { value: 6, label: '周六' },
+  { value: 0, label: '周日' },
+];
+
+const formatTimePricingMinute = (minute) => {
+  const normalized = Math.max(0, Math.min(1440, Number(minute) || 0));
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+const formatTimePricingWeekdays = (mask, t) => {
+  const numericMask = Number(mask || 0);
+  if (numericMask === 0x7f) return t('每天');
+  if (numericMask === 0x3e) return t('工作日');
+  return TIME_PRICING_WEEKDAYS.filter(
+    (item) => (numericMask & (1 << item.value)) !== 0,
+  )
+    .map((item) => item.label)
+    .join('、');
+};
+
+const formatTimePricingLogPeriod = (other, t) => {
+  const startMinute = Number(other?.time_pricing_start_minute);
+  const endMinute = Number(other?.time_pricing_end_minute);
+  if (!Number.isFinite(startMinute) || !Number.isFinite(endMinute)) {
+    return '';
+  }
+  const weekdays = formatTimePricingWeekdays(
+    other?.time_pricing_weekdays,
+    t,
+  );
+  const timeRange = `${formatTimePricingMinute(startMinute)}–${formatTimePricingMinute(endMinute)}`;
+  const effectiveFrom = String(
+    other?.time_pricing_effective_from || '',
+  ).trim();
+  const effectiveTo = String(other?.time_pricing_effective_to || '').trim();
+  const dateRange =
+    effectiveFrom || effectiveTo
+      ? `${effectiveFrom || '—'} ~ ${effectiveTo || '—'}`
+      : '';
+  const timezone = String(other?.time_pricing_timezone || '').trim();
+  const period = [weekdays, timeRange, dateRange].filter(Boolean).join(' · ');
+  return timezone ? `${period}（${timezone}）` : period;
+};
+
 export const useLogsData = () => {
   const { t } = useTranslation();
 
@@ -1448,6 +1500,24 @@ export const useLogsData = () => {
           key: t('Request ID'),
           value: logs[i].request_id,
         });
+      }
+      if (Number(other?.time_pricing_plan_id) > 0) {
+        const scheduleName = String(
+          other?.time_pricing_schedule_name || '',
+        ).trim();
+        const schedulePeriod = formatTimePricingLogPeriod(other, t);
+        if (scheduleName) {
+          expandDataLocal.push({
+            key: t('时段名称'),
+            value: scheduleName,
+          });
+        }
+        if (schedulePeriod) {
+          expandDataLocal.push({
+            key: t('生效时段'),
+            value: schedulePeriod,
+          });
+        }
       }
       // ASR 异步任务：展示 task_id（type=6 退款日志走下方专属分支，避免重复）
       if (other?.task_id && logs[i].type !== 6) {

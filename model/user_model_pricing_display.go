@@ -120,6 +120,7 @@ func rewriteUserPricingChannelDisplay(
 	ch.MarkupDiscountRate = markupOv
 	// 指定价不套阶梯计费；Option 渠道成本价字段一并清除避免误导。
 	ch.RequestTierPricing = nil
+	ch.TimePricing = nil
 	if ch.QuotaType == 3 {
 		ch.QuotaType = 0
 	}

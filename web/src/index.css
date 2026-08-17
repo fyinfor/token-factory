@@ -1819,6 +1819,46 @@ body.api-docs-desktop-open {
   z-index: 1;
 }
 
+.channel-time-pricing-pill {
+  position: relative;
+  display: inline-flex;
+  height: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid rgba(99, 102, 241, 0.32);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6 48%, #8b5cf6);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.channel-time-pricing-pill::before {
+  position: absolute;
+  inset: -45% -80%;
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.86) 50%,
+    transparent 62%
+  );
+  content: '';
+  opacity: 0;
+  transform: translateX(-70%) rotate(8deg);
+  animation: channel-time-pricing-pill-sheen 3.2s linear infinite;
+}
+
+.channel-time-pricing-pill-text {
+  position: relative;
+  z-index: 1;
+}
+
 .channel-badge-carousel {
   position: relative;
   display: inline-flex;
@@ -1908,9 +1948,26 @@ body.api-docs-desktop-open {
   }
 }
 
+@keyframes channel-time-pricing-pill-sheen {
+  0%,
+  46% {
+    opacity: 0;
+    transform: translateX(-70%) rotate(8deg);
+  }
+  58% {
+    opacity: 0.95;
+  }
+  76%,
+  100% {
+    opacity: 0;
+    transform: translateX(70%) rotate(8deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .channel-badge-carousel-track,
-  .channel-hot-pill::before {
+  .channel-hot-pill::before,
+  .channel-time-pricing-pill::before {
     animation: none;
   }
 }
@@ -1938,6 +1995,47 @@ body.api-docs-desktop-open {
 
 .channel-detail-content {
   background: rgba(207, 221, 238, 0.46);
+}
+
+.channel-time-pricing-panel {
+  margin-block: 12px !important;
+  border-color: rgba(99, 102, 241, 0.18) !important;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.84),
+      rgba(239, 246, 255, 0.76)
+    ),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(139, 92, 246, 0.12),
+      transparent 42%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 8px 24px rgba(59, 130, 246, 0.08);
+}
+
+.channel-time-pricing-panel-icon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: linear-gradient(
+    135deg,
+    rgba(6, 182, 212, 0.16),
+    rgba(139, 92, 246, 0.16)
+  );
+  color: #4f46e5;
+}
+
+.channel-time-pricing-period-card {
+  border-color: rgba(99, 102, 241, 0.14);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 7px 20px rgba(59, 130, 246, 0.06);
 }
 
 .channel-detail-content > section {
@@ -2315,6 +2413,41 @@ html.dark .channel-hot-pill {
   border-color: rgba(251, 191, 36, 0.28);
   background: linear-gradient(135deg, #d97706, #ea580c 48%, #dc2626);
   box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
+}
+
+html.dark .channel-time-pricing-pill {
+  border-color: rgba(125, 211, 252, 0.24);
+  background: linear-gradient(135deg, #0891b2, #2563eb 48%, #7c3aed);
+  box-shadow: 0 8px 22px rgba(59, 130, 246, 0.14);
+}
+
+html.dark .channel-time-pricing-panel {
+  border-color: rgba(96, 165, 250, 0.18) !important;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.64)),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(124, 58, 237, 0.16),
+      transparent 44%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+html.dark .channel-time-pricing-panel-icon {
+  background: linear-gradient(
+    135deg,
+    rgba(6, 182, 212, 0.2),
+    rgba(139, 92, 246, 0.2)
+  );
+  color: #7dd3fc;
+}
+
+html.dark .channel-time-pricing-period-card {
+  border-color: rgba(96, 165, 250, 0.14);
+  background: rgba(15, 23, 42, 0.5);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
 }
 
 html.dark .channel-price-value {

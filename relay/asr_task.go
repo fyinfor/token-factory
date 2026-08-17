@@ -102,6 +102,10 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
 	}
+	priceDataSnapshot, err := common.Marshal(priceData)
+	if err != nil {
+		return types.NewError(fmt.Errorf("保存 ASR 提交价格快照失败: %w", err), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+	}
 
 	if strings.TrimSpace(info.ChannelBaseUrl) == "" {
 		return types.NewErrorWithStatusCode(
@@ -142,15 +146,16 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 	}
 
 	task := &model.AsrTask{
-		TaskID:         model.NewAsrTaskID(),
-		UpstreamTaskID: taskResp.Output.TaskID,
-		UserID:         info.UserId,
-		TokenID:        info.TokenId,
-		ChannelID:      info.ChannelId,
-		Model:          info.OriginModelName,
-		AudioURL:       fileURL,
-		Status:         dto.ASRTaskStatusPending,
-		Quota:          preConsumed,
+		TaskID:            model.NewAsrTaskID(),
+		UpstreamTaskID:    taskResp.Output.TaskID,
+		UserID:            info.UserId,
+		TokenID:           info.TokenId,
+		ChannelID:         info.ChannelId,
+		Model:             info.OriginModelName,
+		AudioURL:          fileURL,
+		Status:            dto.ASRTaskStatusPending,
+		Quota:             preConsumed,
+		PriceDataSnapshot: string(priceDataSnapshot),
 	}
 	if taskResp.Output.TaskStatus == aliyunasr.AliASRTaskStatusRunning {
 		task.Status = dto.ASRTaskStatusRunning
@@ -405,8 +410,10 @@ func settleASRTaskSuccess(ctx context.Context, task *model.AsrTask, taskResp *al
 	if tfErr != nil {
 		return tfErr
 	}
-	if _, err := helper.ModelPriceHelperASR(c, billingInfo, seconds); err != nil {
-		return fmt.Errorf("计算 ASR 价格失败: %w", err)
+	if !billingInfo.PriceData.UsePrice || billingInfo.PriceData.ModelPrice <= 0 {
+		if _, err := helper.ModelPriceHelperASR(c, billingInfo, seconds); err != nil {
+			return fmt.Errorf("计算 ASR 价格失败: %w", err)
+		}
 	}
 	actualQuota := service.ComputeASRQuota(c, billingInfo, seconds)
 	preConsumed := task.Quota // 提交预扣额度，必须在占位更新前保存
@@ -485,6 +492,7 @@ func prepareASRBillingContext(task *model.AsrTask, channelModel *model.Channel) 
 	billingInfo.RelayMode = relayconstant.RelayModeAudioTranscriptionAsyncFetch
 	billingInfo.FinalPreConsumedQuota = task.Quota
 	billingInfo.StartTime = time.Unix(task.CreatedAt, 0)
+	restoreASRPriceDataSnapshot(task, billingInfo)
 	if task.TokenID > 0 {
 		if tok, tokErr := model.GetTokenById(task.TokenID); tokErr == nil && tok != nil {
 			billingInfo.TokenId = tok.Id
@@ -492,6 +500,22 @@ func prepareASRBillingContext(task *model.AsrTask, channelModel *model.Channel) 
 		}
 	}
 	return c, billingInfo, nil
+}
+
+func restoreASRPriceDataSnapshot(task *model.AsrTask, billingInfo *relaycommon.RelayInfo) bool {
+	if task == nil || billingInfo == nil {
+		return false
+	}
+	raw := strings.TrimSpace(task.PriceDataSnapshot)
+	if raw == "" {
+		return false
+	}
+	var snapshot types.PriceData
+	if err := common.UnmarshalJsonStr(raw, &snapshot); err != nil {
+		return false
+	}
+	billingInfo.PriceData = snapshot
+	return true
 }
 
 func writeASRFetchResponse(c *gin.Context, task *model.AsrTask, errMsg string) {

@@ -74,9 +74,19 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	supplierID := resolveSupplierIDByChannel(info)
 	// 计价名可回退到渠道 model_mapping 规范模型；日志仍用 OriginModelName。
 	pricingModelName := model.ResolvePricingModelName(c.GetString("model_mapping"), info.OriginModelName)
+	timePricing := resolveChannelModelTimePricing(c, channelID, pricingModelName)
+	independentTimePricing := usesIndependentTimePricing(timePricing)
 	modelPrice, usePrice := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, pricingModelName)
+	if independentTimePricing {
+		modelPrice = 0
+		usePrice = false
+		if timePricing.Payload.ModelPrice != nil {
+			modelPrice = *timePricing.Payload.ModelPrice
+			usePrice = true
+		}
+	}
 	// 归属供应商的渠道：固定价以 supplier_* 独立表优先于用户分组价；非供应商渠道保留分组覆盖。
-	if supplierID <= 0 {
+	if !independentTimePricing && supplierID <= 0 {
 		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, pricingModelName); ok {
 			modelPrice = groupPrice
 			usePrice = true
@@ -86,8 +96,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, pricingModelName)
 
 	// 提前获取成本折扣率、加价折扣率及全局倍率/固定价（新计费公式所需）
-	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, pricingModelName)
+	rawDisc, operatingCost, chDisc, markupDisc := resolveChannelBillingPercents(c, info, channelID, pricingModelName, timePricing)
 	globalRatio, _, _ := ratio_setting.GetModelRatio(pricingModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(pricingModelName, false)
 	// 全局子倍率（用于各类型加价部分的独立计算）
@@ -114,6 +123,10 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		chDisc = model.EffectiveCostPercent(rawDisc, operatingCost)
 		markupDisc = ov.MarkupDiscountRate
 		groupRatioInfo = types.GroupRatioInfo{GroupRatio: 1.0, GroupSpecialRatio: -1}
+		timePricing = nil
+		independentTimePricing = false
+		modelPrice = globalPrice
+		_, usePrice = ratio_setting.GetModelPrice(pricingModelName, false)
 	}
 
 	var preConsumedQuota int
@@ -136,9 +149,20 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 		var success bool
 		var matchName string
-		modelRatio, success, matchName = model.ResolveSupplierScopedModelRatio(channelID, supplierID, pricingModelName)
+		if independentTimePricing {
+			matchName = pricingModelName
+			if timePricing.Payload.ModelRatio != nil {
+				modelRatio = *timePricing.Payload.ModelRatio
+				success = true
+			} else if timePricing.Payload.ModelRequestTierPricing != nil {
+				modelRatio = globalRatio
+				success = true
+			}
+		} else {
+			modelRatio, success, matchName = model.ResolveSupplierScopedModelRatio(channelID, supplierID, pricingModelName)
+		}
 		// 供应商自有渠道：输入倍率以独立表（及 Resolve 内平台渠道 Option 回退）为准，不被用户分组倍率覆盖。
-		if supplierID <= 0 {
+		if !independentTimePricing && supplierID <= 0 {
 			if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, pricingModelName); ok {
 				modelRatio = groupModelRatio
 				success = true
@@ -178,6 +202,42 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		if hasChannelVideoCompletionRatio {
 			videoCompletionRatio = channelVideoCompletionRatio
 		}
+		if independentTimePricing {
+			completionRatio = globalCompletionRatio
+			cacheRatio = globalCacheRatio
+			cacheCreationRatio = globalCreateCacheRatio
+			imageRatio = globalImageRatio
+			audioRatio = globalAudioRatio
+			audioCompletionRatio = globalAudioCompletionRatio
+			videoRatio = ratio_setting.GetVideoRatio(pricingModelName)
+			videoCompletionRatio = ratio_setting.GetVideoCompletionRatio(pricingModelName)
+			if timePricing.Payload.CompletionRatio != nil {
+				completionRatio = *timePricing.Payload.CompletionRatio
+			}
+			if timePricing.Payload.CacheRatio != nil {
+				cacheRatio = *timePricing.Payload.CacheRatio
+			}
+			if timePricing.Payload.CreateCacheRatio != nil {
+				cacheCreationRatio = *timePricing.Payload.CreateCacheRatio
+			}
+			if timePricing.Payload.ImageRatio != nil {
+				imageRatio = *timePricing.Payload.ImageRatio
+			}
+			if timePricing.Payload.AudioRatio != nil {
+				audioRatio = *timePricing.Payload.AudioRatio
+			}
+			if timePricing.Payload.AudioCompletionRatio != nil {
+				audioCompletionRatio = *timePricing.Payload.AudioCompletionRatio
+			}
+			if timePricing.Payload.VideoRatio != nil {
+				videoRatio = *timePricing.Payload.VideoRatio
+			}
+			if timePricing.Payload.VideoCompletionRatio != nil {
+				videoCompletionRatio = *timePricing.Payload.VideoCompletionRatio
+			}
+			cacheCreationRatio5m = cacheCreationRatio
+			cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
+		}
 
 		// 用户指定价：输出/缓存等子倍率同样替换为全局值（渠道无关）。
 		if userPricingOverride && globalRatio > 0 {
@@ -193,7 +253,25 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		effInputRateWithGroup := effInputRate * groupRatioInfo.GroupRatio
 
 		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
-		if tierHit, ok := ratio_setting.ResolveRequestTierHit(channelID, pricingModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio); ok && !userPricingOverride {
+		var tierHit ratio_setting.RequestTierHit
+		var tierOK bool
+		if independentTimePricing {
+			var globalTier *ratio_setting.RequestTierPricing
+			if rule, ok := ratio_setting.GetModelRequestTierPricing(pricingModelName); ok {
+				globalTier = &rule
+			}
+			tierHit, tierOK = ratio_setting.ResolveRequestTierHitWithRules(
+				timePricing.Payload.ModelRequestTierPricing,
+				globalTier,
+				int64(preConsumedTokens),
+				chDisc,
+				markupDisc,
+				groupRatioInfo.GroupRatio,
+			)
+		} else {
+			tierHit, tierOK = ratio_setting.ResolveRequestTierHit(channelID, pricingModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio)
+		}
+		if tierOK && !userPricingOverride {
 			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(tierHit.EffectiveInput * groupRatioInfo.GroupRatio)).Round(0).IntPart())
 		} else {
 			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(effInputRateWithGroup)).Round(0).IntPart())
@@ -265,6 +343,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		GlobalAudioRatio:           globalAudioRatio,
 		GlobalAudioCompletionRatio: globalAudioCompletionRatio,
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 
 	if common.DebugEnabled {
 		println(fmt.Sprintf("model_price_helper result: %s", priceData.ToSetting()))
@@ -286,8 +365,17 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 
 	supplierID := resolveSupplierIDByChannel(info)
 	pricingModelName := model.ResolvePricingModelName(c.GetString("model_mapping"), info.OriginModelName)
+	timePricing := resolveChannelModelTimePricing(c, channelID, pricingModelName)
+	independentTimePricing := usesIndependentTimePricing(timePricing)
 	modelPrice, success := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, pricingModelName)
-	if supplierID <= 0 {
+	if independentTimePricing {
+		if timePricing.Payload.ModelPrice == nil {
+			return types.PriceData{}, fmt.Errorf("model %s active time-pricing plan has no per-call price", pricingModelName)
+		}
+		modelPrice = *timePricing.Payload.ModelPrice
+		success = true
+	}
+	if !independentTimePricing && supplierID <= 0 {
 		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, pricingModelName); ok {
 			modelPrice = groupPrice
 			success = true
@@ -316,8 +404,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 
 	}
 	// 新公式：固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
-	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, pricingModelName)
+	rawDisc, operatingCost, chDisc, markupDisc := resolveChannelBillingPercents(c, info, channelID, pricingModelName, timePricing)
 	globalPrice, _ := ratio_setting.GetModelPrice(pricingModelName, false)
 	// 用户指定价：三折扣替换为用户覆盖值，基价替换为全局官方固定价，分组倍率强制为 1。
 	userPricingOverride := false
@@ -331,6 +418,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 		if globalPrice > 0 {
 			modelPrice = globalPrice
 		}
+		timePricing = nil
 	}
 	effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
 	quota := int(effModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
@@ -359,6 +447,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 		GlobalModelRatio:        0,
 		GlobalModelPrice:        globalPrice,
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 	return priceData, nil
 }
 
@@ -436,9 +525,12 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 	if info.ChannelMeta != nil {
 		channelID = info.ChannelId
 	}
+	timePricing := resolveChannelModelTimePricing(c, channelID, info.OriginModelName)
 	// 前置双重校验：能力匹配 + 分辨率档位匹配（不通过则统一友好提示）。
-	if err := validateVideoModelPrice(c, channelID, info.OriginModelName); err != nil {
-		return types.PriceData{}, err
+	if !usesIndependentTimePricing(timePricing) {
+		if err := validateVideoModelPrice(c, channelID, info.OriginModelName); err != nil {
+			return types.PriceData{}, err
+		}
 	}
 
 	// 0) 视频「按 Token 计费」（最高优先级）：视频价格配置为 per_token 规则且与当前请求
@@ -506,6 +598,9 @@ func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 	estimateCtx := estimateVideoRequestContext(c)
 	hasAudio := requestHasAudio(c)
 	mode := string(estimateCtx.Mode)
+	timePricing := resolveChannelModelTimePricing(c, channelID, info.OriginModelName)
+	independentTimePricing := usesIndependentTimePricing(timePricing)
+	rawDisc, operatingCost, chDisc, markupDisc := resolveChannelBillingPercents(c, info, channelID, info.OriginModelName, timePricing)
 
 	groupRatioInfo := HandleGroupRatio(c, info)
 	preConsumeTokens := service.SeedanceTokenPreConsumeTokens
@@ -513,18 +608,28 @@ func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 	if req, err := relaycommon.GetTaskRequest(c); err == nil {
 		resolutionLabel = service.VideoBillingResolutionLabelFromRequest(req)
 	}
-	quota, match, ok := service.CalcVideoTokenQuota(
-		channelID, info.UserId, info.OriginModelName, mode,
-		estimateCtx.Width, estimateCtx.Height, hasAudio,
-		preConsumeTokens, groupRatioInfo.GroupRatio,
-		resolutionLabel,
-	)
+	var quota int
+	var match *service.VideoTokenRuleMatch
+	var ok bool
+	if independentTimePricing && timePricing.Payload.VideoPricingRules != nil {
+		quota, match, ok = service.CalcVideoTokenQuotaWithPricingRules(
+			*timePricing.Payload.VideoPricingRules, info.OriginModelName, mode,
+			estimateCtx.Width, estimateCtx.Height, hasAudio,
+			preConsumeTokens, groupRatioInfo.GroupRatio, resolutionLabel,
+			chDisc, markupDisc,
+		)
+	} else if !independentTimePricing {
+		quota, match, ok = service.CalcVideoTokenQuota(
+			channelID, info.UserId, info.OriginModelName, mode,
+			estimateCtx.Width, estimateCtx.Height, hasAudio,
+			preConsumeTokens, groupRatioInfo.GroupRatio,
+			resolutionLabel,
+		)
+	}
 	if !ok || quota <= 0 || match == nil {
 		return types.PriceData{}, false
 	}
 
-	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	chDiscCopy := chDisc
 
 	priceData := types.PriceData{
@@ -556,6 +661,7 @@ func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 			match.EffectivePricePerToken, preConsumeTokens, groupRatioInfo.GroupRatio, quota,
 		))
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 	info.PriceData = priceData
 	return priceData, true
 }
@@ -571,6 +677,7 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 	}
 	supplierID := resolveSupplierIDByChannel(info)
 	modelName := info.OriginModelName
+	timePricing := resolveChannelModelTimePricing(c, channelID, modelName)
 
 	// 输入倍率：与 ModelPriceHelper 一致，供应商渠道走 ResolveSupplierScoped（独立表优先于渠道 Option）。
 	modelRatio, modelRatioOK, _ := model.ResolveSupplierScopedModelRatio(channelID, supplierID, modelName)
@@ -649,8 +756,7 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 	}
 
 	// 新公式（视频 token 计费）：有效倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
-	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	rawDisc, operatingCost, chDisc, markupDisc := resolveChannelBillingPercents(c, info, channelID, info.OriginModelName, timePricing)
 	globalRatioVideo, _, _ := ratio_setting.GetModelRatio(modelName)
 	effRateVideo := model.EffectiveInputRate(modelRatio, globalRatioVideo, chDisc, markupDisc)
 	// rawQuota 已按 modelRatio * groupRatio 计算，用 effRateVideo/modelRatio 修正（modelRatio>0 时）
@@ -698,6 +804,7 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 			groupRatioInfo.GroupRatio, quota,
 		))
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 	return priceData, true, nil
 }
 
@@ -915,7 +1022,16 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 	if info.ChannelMeta != nil {
 		channelID = info.ChannelId
 	}
-	rules, ok := resolveVideoPerSecondPricingRules(channelID, info.OriginModelName)
+	timePricing := resolveChannelModelTimePricing(c, channelID, info.OriginModelName)
+	independentTimePricing := usesIndependentTimePricing(timePricing)
+	var rules ratio_setting.VideoPricingRules
+	var ok bool
+	if independentTimePricing && timePricing.Payload.VideoPricingRules != nil && ratio_setting.HasUsableVideoPerSecondRules(*timePricing.Payload.VideoPricingRules) {
+		rules = *timePricing.Payload.VideoPricingRules
+		ok = true
+	} else if !independentTimePricing {
+		rules, ok = resolveVideoPerSecondPricingRules(channelID, info.OriginModelName)
+	}
 	if !ok {
 		return types.PriceData{}, false, nil
 	}
@@ -945,23 +1061,26 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		return types.PriceData{}, false, nil
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
-	rawDiscVPS, operatingCostVPS, chDiscVPS := resolveChannelCostPercents(channelID)
-	markupDiscVPS := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
-	effPricePerSecond, _, _, effOK := service.EffectiveVideoPerSecondUSDForDimensions(
-		channelID,
-		info.OriginModelName,
-		string(estimateCtx.Mode),
-		estimateCtx.Width,
-		estimateCtx.Height,
-		hasAudio,
-		chDiscVPS,
-		markupDiscVPS,
-		resolutionLabel,
-	)
+	rawDiscVPS, operatingCostVPS, chDiscVPS, markupDiscVPS := resolveChannelBillingPercents(c, info, channelID, info.OriginModelName, timePricing)
+	var effPricePerSecond, globalPricePerSecond float64
+	var effOK bool
+	if independentTimePricing {
+		effPricePerSecond, _, globalPricePerSecond, effOK = service.EffectiveVideoPerSecondUSDForPricingRules(
+			rules, info.OriginModelName, string(estimateCtx.Mode),
+			estimateCtx.Width, estimateCtx.Height, hasAudio,
+			chDiscVPS, markupDiscVPS, resolutionLabel,
+		)
+	} else {
+		effPricePerSecond, _, globalPricePerSecond, effOK = service.EffectiveVideoPerSecondUSDForDimensions(
+			channelID, info.OriginModelName, string(estimateCtx.Mode),
+			estimateCtx.Width, estimateCtx.Height, hasAudio,
+			chDiscVPS, markupDiscVPS, resolutionLabel,
+		)
+	}
 	if !effOK || effPricePerSecond <= 0 {
 		// 正常应由 EffectiveVideoPerSecondUSDForDimensions 完成全局垫底+折扣；
 		// 此处仅作安全回退，仍须套用成本/加价折扣，禁止按档位原价实扣。
-		if !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName) {
+		if independentTimePricing || !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName) {
 			effPricePerSecond = model.EffectiveRuleUnitPrice(pricePerSecond, pricePerSecond, chDiscVPS, markupDiscVPS)
 			if effPricePerSecond <= 0 {
 				return types.PriceData{}, false, nil
@@ -970,14 +1089,16 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 			return types.PriceData{}, false, nil
 		}
 	}
-	globalPricePerSecond := globalVideoPerSecondUSDForRelay(
-		info.OriginModelName,
-		string(estimateCtx.Mode),
-		estimateCtx.Width,
-		estimateCtx.Height,
-		hasAudio,
-	)
-	if globalPricePerSecond <= 0 && !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName) {
+	if globalPricePerSecond <= 0 {
+		globalPricePerSecond = globalVideoPerSecondUSDForRelay(
+			info.OriginModelName,
+			string(estimateCtx.Mode),
+			estimateCtx.Width,
+			estimateCtx.Height,
+			hasAudio,
+		)
+	}
+	if globalPricePerSecond <= 0 && (independentTimePricing || !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName)) {
 		globalPricePerSecond = pricePerSecond
 	}
 	rawQuota := float64(seconds) * effPricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
@@ -1010,6 +1131,7 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 	if hasAudio {
 		pd.AddOtherRatio("has_audio", 1)
 	}
+	attachChannelModelTimePricing(&pd, timePricing)
 	return pd, true, nil
 }
 
@@ -1076,8 +1198,20 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		channelID = info.ChannelId
 	}
 	modelName := info.OriginModelName
+	timePricing := resolveChannelModelTimePricing(c, channelID, modelName)
+	independentTimePricing := usesIndependentTimePricing(timePricing)
 
-	rules, ok := resolveVideoPerVideoPricingRules(channelID, modelName)
+	var rules ratio_setting.VideoPricingRules
+	var ok bool
+	if independentTimePricing && timePricing.Payload.VideoPricingRules != nil && ratio_setting.HasUsableVideoPerVideoRules(*timePricing.Payload.VideoPricingRules) {
+		rules = *timePricing.Payload.VideoPricingRules
+		ok = true
+	} else if !independentTimePricing {
+		rules, ok = resolveVideoPerVideoPricingRules(channelID, modelName)
+	}
+	if independentTimePricing && timePricing.Payload.VideoPrice != nil && *timePricing.Payload.VideoPrice > 0 {
+		ok = true
+	}
 	if !ok {
 		return types.PriceData{}, false, nil
 	}
@@ -1096,6 +1230,10 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 			usd, okPrice = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.TextToVideoPerItem)
 		}
 	}
+	if (!okPrice || usd <= 0) && independentTimePricing && timePricing.Payload.VideoPrice != nil {
+		usd = *timePricing.Payload.VideoPrice
+		okPrice = usd > 0
+	}
 	if !okPrice || usd <= 0 {
 		return types.PriceData{}, false, nil
 	}
@@ -1111,8 +1249,7 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		}
 	}
 
-	rawDiscVPV, operatingCostVPV, chDiscVPV := resolveChannelCostPercents(channelID)
-	markupDiscVPV := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	rawDiscVPV, operatingCostVPV, chDiscVPV, markupDiscVPV := resolveChannelBillingPercents(c, info, channelID, info.OriginModelName, timePricing)
 	globalUsd := globalVideoPerVideoUSDForRelay(modelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
 	effUsd := model.EffectiveRuleUnitPrice(usd, globalUsd, chDiscVPV, markupDiscVPV)
 	rawQuota = effUsd * common.QuotaPerUnit * groupRatioInfo.GroupRatio
@@ -1151,6 +1288,7 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 			modelName, estimateCtx.Mode, estimateCtx.Width, estimateCtx.Height, usd, groupRatioInfo.GroupRatio, quota,
 		))
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 	return priceData, true, nil
 }
 

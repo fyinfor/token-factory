@@ -236,6 +236,7 @@ export const useModelPricingData = (options = {}) => {
   const [endpointMap, setEndpointMap] = useState({});
   const [autoGroups, setAutoGroups] = useState([]);
   const [hotModelLimit, setHotModelLimit] = useState(8);
+  const hasTimePricingRef = useRef(false);
 
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
@@ -688,10 +689,23 @@ export const useModelPricingData = (options = {}) => {
     });
 
     setModels(displayModels);
+    setSelectedModel((current) => {
+      if (!current) return current;
+      const updated = displayModels.find(
+        (model) => model.model_name === current.model_name,
+      );
+      if (!updated) return current;
+      return current.preferred_hot_channel_id
+        ? {
+            ...updated,
+            preferred_hot_channel_id: current.preferred_hot_channel_id,
+          }
+        : updated;
+    });
   };
 
-  const loadPricing = async () => {
-    setLoading(true);
+  const loadPricing = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     let url = '/api/pricing';
     const res = await API.get(url);
     const {
@@ -723,6 +737,13 @@ export const useModelPricingData = (options = {}) => {
       hot_model_limit,
     } = res.data;
     if (success) {
+      hasTimePricingRef.current = Array.isArray(data)
+        ? data.some((model) =>
+            (model?.channel_list || []).some(
+              (channel) => channel?.time_pricing?.has_schedules === true,
+            ),
+          )
+        : false;
       setGroupRatio(group_ratio);
       setGroupModelPrice(group_model_price || {});
       setGroupModelRatio(group_model_ratio || {});
@@ -744,7 +765,7 @@ export const useModelPricingData = (options = {}) => {
       setGlobalModelRequestTierPricing(model_request_tier_pricing || {});
       setPricingChannels(channels || []);
       setUsableGroup(usable_group);
-      setSelectedGroup('all');
+      if (!silent) setSelectedGroup('all');
       // 构建供应商 Map 方便查找
       const vendorMap = {};
       if (Array.isArray(vendors)) {
@@ -760,9 +781,9 @@ export const useModelPricingData = (options = {}) => {
       );
       setModelsFormat(data, group_ratio, vendorMap);
     } else {
-      showError(message);
+      if (!silent) showError(message);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
   const loadPerfMetrics = async () => {
@@ -856,6 +877,14 @@ export const useModelPricingData = (options = {}) => {
 
   useEffect(() => {
     refresh().then();
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (!hasTimePricingRef.current) return;
+      loadPricing({ silent: true }).catch(() => {});
+    }, 60000);
+    return () => window.clearInterval(intervalId);
   }, []);
 
   // 当筛选/排序变化时重置到第一页

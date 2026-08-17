@@ -768,8 +768,23 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 		return 0, nil
 	}
 	// 优先渠道按秒档位；无则回退全局 VideoPricingRules 垫底（与预扣 EffectiveVideoPerSecond 一致）。
-	rules, rulesOK := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
-	if !rulesOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+	var rules ratio_setting.VideoPricingRules
+	var rulesOK bool
+	billingContext := task.PrivateData.BillingContext
+	hasIndependentTimePricing := false
+	if billingContext != nil && billingContext.TimePricingPlanID > 0 && strings.TrimSpace(billingContext.TimePricingPayload) != "" {
+		if payload, err := model.ParseChannelModelPricePlanPayload(billingContext.TimePricingPayload); err == nil && payload.ResolvedMode() == model.ChannelModelPricePlanModePrice {
+			hasIndependentTimePricing = true
+			if payload.VideoPricingRules != nil {
+				rules = *payload.VideoPricingRules
+				rulesOK = ratio_setting.HasUsableVideoPerSecondRules(rules)
+			}
+		}
+	}
+	if !hasIndependentTimePricing {
+		rules, rulesOK = ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
+	}
+	if !hasIndependentTimePricing && (!rulesOK || !ratio_setting.HasUsableVideoPerSecondRules(rules)) {
 		rules, rulesOK = ratio_setting.GetVideoPricingRules(modelName)
 		if !rulesOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
 			return 0, nil
@@ -813,9 +828,15 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	}
 	costDisc := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	if billingContext != nil && billingContext.TimePricingPlanID > 0 && billingContext.MarkupDiscountPercent != nil {
+		markupDisc = *billingContext.MarkupDiscountPercent
+	}
 	globalPerSec := globalVideoPerSecondUSDForChannelTier(
 		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, meta.HasAudio, match.UnifiedAudio,
 	)
+	if billingContext != nil && billingContext.TimePricingPlanID > 0 && billingContext.VideoGlobalRulePrice > 0 {
+		globalPerSec = billingContext.VideoGlobalRulePrice
+	}
 	effPerSec := effectiveVideoPerSecondUSD(match.PricePerSecond, globalPerSec, costDisc, markupDisc)
 	rawQuota := float64(seconds) * effPerSec * common.QuotaPerUnit * groupRatio
 	quota := int(math.Round(rawQuota))

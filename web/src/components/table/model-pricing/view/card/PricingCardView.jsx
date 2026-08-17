@@ -2394,6 +2394,18 @@ const PricingCardView = ({
       filterSupplier,
       filterSupplierType,
     });
+    const timePricingChannels = Array.isArray(model?.channel_list)
+      ? model.channel_list.filter(
+          (channel) => channel?.time_pricing?.has_schedules === true,
+        )
+      : [];
+    const hasTimePricing = timePricingChannels.length > 0;
+    const activeTimePricing = timePricingChannels.find(
+      (channel) => channel?.time_pricing?.active === true,
+    )?.time_pricing;
+    const timePricingTitle = activeTimePricing
+      ? `${t('分时计费')} · ${activeTimePricing.active_schedule_name || ''} · ${t('当前生效')}`
+      : `${t('分时计费')} · ${t('渠道常规价')} · ${t('当前生效')}`;
     const pricingBlurStyle = blurPricing
       ? {
           filter: 'blur(6px)',
@@ -2427,7 +2439,10 @@ const PricingCardView = ({
                 {renderHighlightedText(model.model_name)}
               </h3>
 
-              {(isHomeHot || routeMetaTitle || discountBadge) && (
+              {(isHomeHot ||
+                routeMetaTitle ||
+                discountBadge ||
+                hasTimePricing) && (
                 <div className='home-model-title-meta'>
                   {routeMetaTitle ? (
                     <button
@@ -2469,6 +2484,16 @@ const PricingCardView = ({
                     >
                       {discountBadge}
                     </Tag>
+                  ) : null}
+                  {hasTimePricing ? (
+                    <span
+                      className='home-model-time-pricing-pill'
+                      title={timePricingTitle}
+                    >
+                      <span className='home-model-time-pricing-pill-text'>
+                        {t('分时计费')}
+                      </span>
+                    </span>
                   ) : null}
                   {isHomeHot ? (
                     <span className='home-model-hot-pill' title={t('热门')}>

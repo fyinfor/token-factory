@@ -162,6 +162,19 @@ type TaskBillingContext struct {
 	VideoRuleWidth              int                    `json:"video_rule_width,omitempty"`
 	VideoRuleHeight             int                    `json:"video_rule_height,omitempty"`
 	VideoRuleHasAudio           bool                   `json:"video_rule_has_audio,omitempty"`
+	TimePricingScheduleID       int                    `json:"time_pricing_schedule_id,omitempty"`
+	TimePricingPlanID           int                    `json:"time_pricing_plan_id,omitempty"`
+	TimePricingPlanVersion      int                    `json:"time_pricing_plan_version,omitempty"`
+	TimePricingScheduleName     string                 `json:"time_pricing_schedule_name,omitempty"`
+	TimePricingPlanName         string                 `json:"time_pricing_plan_name,omitempty"`
+	TimePricingTimezone         string                 `json:"time_pricing_timezone,omitempty"`
+	TimePricingWeekdays         int                    `json:"time_pricing_weekdays,omitempty"`
+	TimePricingStartMinute      int                    `json:"time_pricing_start_minute,omitempty"`
+	TimePricingEndMinute        int                    `json:"time_pricing_end_minute,omitempty"`
+	TimePricingEffectiveFrom    string                 `json:"time_pricing_effective_from,omitempty"`
+	TimePricingEffectiveTo      string                 `json:"time_pricing_effective_to,omitempty"`
+	TimePricingMatchedAt        int64                  `json:"time_pricing_matched_at,omitempty"`
+	TimePricingPayload          string                 `json:"time_pricing_payload,omitempty"`
 	UpstreamBillingOther        map[string]interface{} `json:"upstream_billing_other,omitempty"`
 }
 
