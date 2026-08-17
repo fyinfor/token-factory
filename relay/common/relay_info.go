@@ -196,14 +196,14 @@ type RelayInfo struct {
 
 // ImageBillingSnapshot tracks per-image generation pricing for pre-consume and settlement.
 type ImageBillingSnapshot struct {
-	UsdPerImage float64
-	Width       int
-	Height      int
-	RuleWidth   int
-	RuleHeight  int
-	RuleRes     string
-	Count       int
-	Mode        string
+	UsdPerImage     float64
+	Width           int
+	Height          int
+	RuleWidth       int
+	RuleHeight      int
+	RuleRes         string
+	Count           int
+	Mode            string
 	CappedToMaxTier bool
 	// DimensionsFromUpstream marks Width/Height as taken from upstream output metadata
 	// (e.g. Tencent AigcImageTask FileInfos.MetaData). Finalize prefers these over request.Size.
@@ -703,8 +703,8 @@ func (info *RelayInfo) HasSendResponse() bool {
 type TaskRelayInfo struct {
 	Action       string
 	OriginTaskID string
-	// PublicTaskID 是提交时预生成的 task_xxxx 格式公开 ID，
-	// 供 DoResponse 在返回给客户端时使用（避免暴露上游真实 ID）。
+	// PublicTaskID 是提交时预生成的公开 ID，供 DoResponse 返回给客户端（避免暴露上游真实 ID）。
+	// 默认 task_xxxx；Seedance 2.0 为火山标准 cgt-{yyyyMMddHHmmss}-{rand}。
 	PublicTaskID string
 
 	ConsumeQuota bool
