@@ -88,6 +88,8 @@ const PricingPage = () => {
         visible={pricingData.showModelDetail}
         onClose={pricingData.closeModelDetail}
         modelData={pricingData.selectedModel}
+        activeSection={pricingData.modelDetailSection}
+        onActiveSectionChange={pricingData.setModelDetailSection}
         groupRatio={pricingData.groupRatio}
         groupModelPrice={pricingData.groupModelPrice}
         groupModelRatio={pricingData.groupModelRatio}

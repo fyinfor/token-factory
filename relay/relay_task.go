@@ -191,9 +191,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 2.6 渠道视频超分：命中规则时写入 context，预扣仍按用户选择的超分分辨率计价。
 	service.ApplyChannelVideoUpscaleRule(c, info)
 
-	// 3. 预生成公开 task ID（仅首次）
+	// 3. 预生成公开 task ID（仅首次）。Seedance 2.0 转为火山标准 cgt-{yyyyMMddHHmmss}-{rand}。
 	if info.PublicTaskID == "" {
-		info.PublicTaskID = model.GenerateTaskID()
+		info.PublicTaskID = model.GeneratePublicTaskID(info.ChannelType)
+	} else if info.ChannelType == constant.ChannelTypeSeedance {
+		info.PublicTaskID = model.ConvertToVolcEngineVideoTaskID(info.PublicTaskID, time.Now())
 	}
 
 	// 4. 价格计算：基础模型价格

@@ -222,7 +222,7 @@ const MobileSiteNavDropdown = ({
             onMouseDown={(e) => {
               e.stopPropagation();
             }}
-            className='!pl-1 !pr-1.5 !py-1.5 !h-auto !w-full !max-w-full !min-w-0 !justify-between !text-semi-color-text-0 dark:!text-gray-200 hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700 !rounded-lg !font-medium !text-sm'
+            className='!h-8 !w-full !max-w-full !min-w-0 !justify-between !rounded-lg !border !border-semi-color-border !bg-semi-color-bg-0 !px-2 !py-1.5 !text-sm !font-medium !text-semi-color-text-0 !transition-[transform,background-color,border-color] !duration-150 hover:!border-semi-color-primary hover:!bg-semi-color-fill-1 active:!scale-[0.98] dark:!border-gray-600 dark:!bg-gray-800 dark:!text-gray-100 dark:hover:!border-blue-400 dark:hover:!bg-gray-700'
             aria-haspopup='menu'
             aria-label={t('页面导航')}
           >
