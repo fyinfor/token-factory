@@ -159,10 +159,13 @@ func lookupImageTierRawUSD(rules ratio_setting.ImagePricingRules, target imagePe
 	return 0
 }
 
-// BuildImagePerImageHint 汇总当前模型×渠道下图片按张档位，返回最低价档（含成本折扣与加价折扣）及全部档位。
-func BuildImagePerImageHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *ImagePerImagePricingHint {
-	channelRules, chOK := resolveChannelImageRulesForPricingCardHint(channelID, modelName)
-	globalRules, glOK := resolveGlobalImageRulesForPricingCardHint(modelName)
+func buildImagePerImageHintFromRules(
+	channelRules ratio_setting.ImagePricingRules,
+	chOK bool,
+	globalRules ratio_setting.ImagePricingRules,
+	glOK bool,
+	costDiscPercent, markupDiscPercent float64,
+) *ImagePerImagePricingHint {
 	if !chOK && !glOK {
 		return nil
 	}
@@ -186,4 +189,78 @@ func BuildImagePerImageHint(channelID int, modelName string, costDiscPercent, ma
 		TierCount:                  len(tiers),
 		Tiers:                      rows,
 	}
+}
+
+func buildImagePerImageHintFromFlatPrice(
+	channelPrice, globalPrice, costDiscPercent, markupDiscPercent float64,
+) *ImagePerImagePricingHint {
+	if channelPrice <= 0 {
+		channelPrice = globalPrice
+	}
+	if channelPrice <= 0 {
+		return nil
+	}
+	effectivePrice := EffectiveRuleUnitPrice(
+		channelPrice,
+		globalPrice,
+		costDiscPercent,
+		markupDiscPercent,
+	)
+	if effectivePrice <= 0 {
+		return nil
+	}
+	return &ImagePerImagePricingHint{
+		MinUsdAfterChannelDiscount: effectivePrice,
+		Lane:                       "image_flat",
+		TierCount:                  1,
+		Tiers: []ImagePerImageTierRow{{
+			UsdAfterChannelDiscount: effectivePrice,
+			UsdChannelRaw:           channelPrice,
+			UsdOfficial:             globalPrice,
+			Lane:                    "image_flat",
+		}},
+	}
+}
+
+// BuildImagePerImageHint 汇总当前模型×渠道下图片按张档位，返回最低价档（含成本折扣与加价折扣）及全部档位。
+func BuildImagePerImageHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *ImagePerImagePricingHint {
+	channelRules, chOK := resolveChannelImageRulesForPricingCardHint(channelID, modelName)
+	globalRules, glOK := resolveGlobalImageRulesForPricingCardHint(modelName)
+	if hint := buildImagePerImageHintFromRules(
+		channelRules, chOK, globalRules, glOK, costDiscPercent, markupDiscPercent,
+	); hint != nil {
+		return hint
+	}
+	channelPrice, _ := ratio_setting.GetChannelImagePrice(channelID, modelName)
+	globalPrice, _ := ratio_setting.GetImagePrice(modelName)
+	return buildImagePerImageHintFromFlatPrice(
+		channelPrice, globalPrice, costDiscPercent, markupDiscPercent,
+	)
+}
+
+// BuildImagePerImageHintForTimePricingPayload builds the active image price
+// summary from the matched independent plan snapshot.
+func BuildImagePerImageHintForTimePricingPayload(
+	modelName string,
+	payload ChannelModelPricePlanPayload,
+	costDiscPercent, markupDiscPercent float64,
+) *ImagePerImagePricingHint {
+	globalRules, glOK := resolveGlobalImageRulesForPricingCardHint(modelName)
+	if payload.ImagePricingRules != nil && ratio_setting.HasUsableImagePerImageRules(*payload.ImagePricingRules) {
+		return buildImagePerImageHintFromRules(
+			*payload.ImagePricingRules,
+			true,
+			globalRules,
+			glOK,
+			costDiscPercent,
+			markupDiscPercent,
+		)
+	}
+	if payload.ImagePrice == nil || *payload.ImagePrice <= 0 {
+		return nil
+	}
+	globalPrice, _ := ratio_setting.GetImagePrice(modelName)
+	return buildImagePerImageHintFromFlatPrice(
+		*payload.ImagePrice, globalPrice, costDiscPercent, markupDiscPercent,
+	)
 }

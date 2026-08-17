@@ -77,6 +77,22 @@ type PriceData struct {
 	VideoRuleWidth        int
 	VideoRuleHeight       int
 	VideoRuleHasAudio     bool
+
+	// Channel time-pricing snapshot. The raw payload is captured at request
+	// start so asynchronous settlement never re-reads a newer plan version.
+	TimePricingScheduleID    int
+	TimePricingPlanID        int
+	TimePricingPlanVersion   int
+	TimePricingScheduleName  string
+	TimePricingPlanName      string
+	TimePricingTimezone      string
+	TimePricingWeekdays      int
+	TimePricingStartMinute   int
+	TimePricingEndMinute     int
+	TimePricingEffectiveFrom string
+	TimePricingEffectiveTo   string
+	TimePricingMatchedAt     int64
+	TimePricingPayload       string
 }
 
 func (p *PriceData) AddOtherRatio(key string, ratio float64) {

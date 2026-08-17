@@ -77,17 +77,20 @@ type PricingChannelItem struct {
 	// RouteSlug 渠道全局路由后缀，与模型名组合为 {model}/{route_slug} 强制路由至该渠道（整渠道下各模型共用）。
 	RouteSlug string `json:"route_slug,omitempty"`
 	// TestResponseTimeMs 渠道最近可展示的单测耗时（毫秒）；0 代表未测试或测试失败，接口将省略该字段。
-	TestResponseTimeMs   int     `json:"test_response_time_ms,omitempty"`
-	ModelPrice           float64 `json:"model_price"`
-	ModelRatio           float64 `json:"model_ratio"`
-	CompletionRatio      float64 `json:"completion_ratio"`
-	CacheRatio           float64 `json:"cache_ratio"`
-	CreateCacheRatio     float64 `json:"create_cache_ratio"`
-	RequestTierPricing   any     `json:"request_tier_pricing,omitempty"`
-	PriceDiscountPercent float64 `json:"price_discount_percent"` // 最终成本率（成本折扣率 + 经营成本率）
-	EffectiveCostPercent float64 `json:"-"`                      // 内部计算用最终成本率
-	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
-	QuotaType            int     `json:"quota_type"`
+	TestResponseTimeMs      int                     `json:"test_response_time_ms,omitempty"`
+	ModelPrice              float64                 `json:"model_price"`
+	ModelRatio              float64                 `json:"model_ratio"`
+	CompletionRatio         float64                 `json:"completion_ratio"`
+	CacheRatio              float64                 `json:"cache_ratio"`
+	CreateCacheRatio        float64                 `json:"create_cache_ratio"`
+	RequestTierPricing      any                     `json:"request_tier_pricing,omitempty"`
+	PriceDiscountPercent    float64                 `json:"price_discount_percent"` // 最终成本率（成本折扣率 + 经营成本率）
+	RawPriceDiscountPercent float64                 `json:"raw_price_discount_percent"`
+	OperatingCostPercent    float64                 `json:"operating_cost_percent"`
+	EffectiveCostPercent    float64                 `json:"-"`                    // 内部计算用最终成本率
+	MarkupDiscountRate      float64                 `json:"markup_discount_rate"` // 加价折扣率（百分数，0=不加价）
+	QuotaType               int                     `json:"quota_type"`
+	TimePricing             *PricingTimePricingInfo `json:"time_pricing,omitempty"`
 
 	// OptionModelRatio 等：仅 Option「渠道模型定价」显式配置（不做供应商/全局回退），供首页成本价展示。
 	OptionModelRatio           *float64 `json:"option_model_ratio,omitempty"`
@@ -204,12 +207,86 @@ func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) stri
 	return SupplierApplicationAutoAlias(supplierApplicationID)
 }
 
+func pricingTimePricingPriceFromChannel(item PricingChannelItem) PricingTimePricingPrice {
+	return PricingTimePricingPrice{
+		ModelPrice:         item.ModelPrice,
+		ModelRatio:         item.ModelRatio,
+		CompletionRatio:    item.CompletionRatio,
+		CacheRatio:         item.CacheRatio,
+		CreateCacheRatio:   item.CreateCacheRatio,
+		RequestTierPricing: item.RequestTierPricing,
+		QuotaType:          item.QuotaType,
+	}
+}
+
+func pricingTimePricingRatesFromChannel(item PricingChannelItem) PricingTimePricingRates {
+	return PricingTimePricingRates{
+		PriceDiscountPercent: item.RawPriceDiscountPercent,
+		OperatingCostPercent: item.OperatingCostPercent,
+		EffectiveCostPercent: item.EffectiveCostPercent,
+		MarkupDiscountRate:   item.MarkupDiscountRate,
+	}
+}
+
+func decorateTimePricingMediaHints(
+	info *PricingTimePricingInfo,
+	channelID int,
+	modelName string,
+) (*VideoFlatClipPricingHint, *ImagePerImagePricingHint) {
+	if info == nil {
+		return nil, nil
+	}
+	regularCost := info.RegularRates.EffectiveCostPercent
+	regularMarkup := info.RegularRates.MarkupDiscountRate
+	info.RegularPricing.VideoFlatClipHint = BuildVideoFlatClipHint(
+		channelID, modelName, regularCost, regularMarkup,
+	)
+	info.RegularPricing.ImagePerImageHint = BuildImagePerImageHint(
+		channelID, modelName, regularCost, regularMarkup,
+	)
+	activeVideoHint := info.RegularPricing.VideoFlatClipHint
+	activeImageHint := info.RegularPricing.ImagePerImageHint
+	activeScheduleFound := false
+	for scheduleIndex := range info.Schedules {
+		schedule := &info.Schedules[scheduleIndex]
+		costPercent := regularCost
+		markupPercent := regularMarkup
+		if schedule.Mode == ChannelModelPricePlanModeRate && schedule.Rates != nil {
+			costPercent = schedule.Rates.EffectiveCostPercent
+			markupPercent = schedule.Rates.MarkupDiscountRate
+			schedule.Pricing.VideoFlatClipHint = BuildVideoFlatClipHint(
+				channelID, modelName, costPercent, markupPercent,
+			)
+			schedule.Pricing.ImagePerImageHint = BuildImagePerImageHint(
+				channelID, modelName, costPercent, markupPercent,
+			)
+		} else {
+			schedule.Pricing.VideoFlatClipHint = BuildVideoFlatClipHintForTimePricingPayload(
+				modelName, schedule.payload, costPercent, markupPercent,
+			)
+			schedule.Pricing.ImagePerImageHint = BuildImagePerImageHintForTimePricingPayload(
+				modelName, schedule.payload, costPercent, markupPercent,
+			)
+		}
+		if schedule.Active && !activeScheduleFound {
+			activeScheduleFound = true
+			activeVideoHint = schedule.Pricing.VideoFlatClipHint
+			activeImageHint = schedule.Pricing.ImagePerImageHint
+		}
+	}
+	return activeVideoHint, activeImageHint
+}
+
 // BuildPricingAPIItems 为定价接口组装带渠道统计的 data 列表。
 // 渠道项价格为：基础定价（resolveChannelPricingTriple）× 渠道专属折扣；用户/分组倍率由前端用 group_ratio 再乘（与 calculateModelPrice 一致）。
 //
 // includeUntestedChannelPricingRows 为 false 时保持原行为：要求有有效单测耗时，且在渠道已有成功单测时要求本模型单测可匹配。
 // 为 true 时不过滤上述单测门禁，供 /api/price_sync 等需完整渠道定价（含未单测模型×渠道）的场景。
 func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta, includeUntestedChannelPricingRows bool) []PricingAPIItem {
+	return buildPricingAPIItemsAt(filtered, visibleChannelIDs, metas, includeUntestedChannelPricingRows, time.Now())
+}
+
+func buildPricingAPIItemsAt(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta, includeUntestedChannelPricingRows bool, at time.Time) []PricingAPIItem {
 	testSuccessByChannel, err := LoadChannelPricingTestSuccessIndex()
 	if err != nil {
 		common.SysLog(fmt.Sprintf("LoadChannelPricingTestSuccessIndex error: %v", err))
@@ -226,6 +303,11 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 	if err != nil {
 		common.SysLog(fmt.Sprintf("GetAllChannelModelDocsMap error: %v", err))
 		channelDocMap = nil
+	}
+	timePricingDisplay, err := LoadChannelModelTimePricingDisplay(visibleIDs, at)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("LoadChannelModelTimePricingDisplay error: %v", err))
+		timePricingDisplay = nil
 	}
 
 	// 按“模型 × 渠道”打平返回：每条 data 仅包含 1 个 channel_list 与 1 个 supplier_list。
@@ -325,22 +407,24 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				routeSlug = channelSlugMap[row.ChannelID]
 			}
 			chItem := PricingChannelItem{
-				ChannelID:             row.ChannelID,
-				SupplierApplicationID: row.SupplierApplicationID,
-				ChannelNo:             row.ChannelNo,
-				SupplierAlias:         alias,
-				CompanyLogoURL:        strings.TrimSpace(row.CompanyLogoURL),
-				SupplierType:          strings.TrimSpace(row.SupplierType),
-				RouteSlug:             routeSlug,
-				TestResponseTimeMs:    testMs,
-				ModelPrice:            baseMp,
-				ModelRatio:            baseMr,
-				CompletionRatio:       cr,
-				CacheRatio:            chCache,
-				CreateCacheRatio:      chCreate,
-				PriceDiscountPercent:  effectiveCost,
-				EffectiveCostPercent:  effectiveCost,
-				MarkupDiscountRate:    markupRate,
+				ChannelID:               row.ChannelID,
+				SupplierApplicationID:   row.SupplierApplicationID,
+				ChannelNo:               row.ChannelNo,
+				SupplierAlias:           alias,
+				CompanyLogoURL:          strings.TrimSpace(row.CompanyLogoURL),
+				SupplierType:            strings.TrimSpace(row.SupplierType),
+				RouteSlug:               routeSlug,
+				TestResponseTimeMs:      testMs,
+				ModelPrice:              baseMp,
+				ModelRatio:              baseMr,
+				CompletionRatio:         cr,
+				CacheRatio:              chCache,
+				CreateCacheRatio:        chCreate,
+				PriceDiscountPercent:    effectiveCost,
+				RawPriceDiscountPercent: d,
+				OperatingCostPercent:    operatingCost,
+				EffectiveCostPercent:    effectiveCost,
+				MarkupDiscountRate:      markupRate,
 				QuotaType: func() int {
 					if baseMp > 0 {
 						return 1
@@ -351,6 +435,47 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					}
 					return 0
 				}(),
+			}
+			if hasRequestTierPricing {
+				chItem.RequestTierPricing = requestTierPricing
+			}
+			if timePricingDisplay != nil {
+				if info, ok := timePricingDisplay[channelModelTimePricingKey(row.ChannelID, pricingModelName)]; ok {
+					infoCopy := info
+					regularPricing := pricingTimePricingPriceFromChannel(chItem)
+					regularRates := pricingTimePricingRatesFromChannel(chItem)
+					infoCopy.RegularPricing = regularPricing
+					infoCopy.RegularRates = regularRates
+					for scheduleIndex := range infoCopy.Schedules {
+						if infoCopy.Schedules[scheduleIndex].Mode == ChannelModelPricePlanModeRate {
+							infoCopy.Schedules[scheduleIndex].Pricing = regularPricing
+						}
+					}
+					chItem.TimePricing = &infoCopy
+					if info.Active {
+						for _, schedule := range info.Schedules {
+							if !schedule.Active {
+								continue
+							}
+							if schedule.Mode == ChannelModelPricePlanModeRate && schedule.Rates != nil {
+								chItem.RawPriceDiscountPercent = schedule.Rates.PriceDiscountPercent
+								chItem.OperatingCostPercent = schedule.Rates.OperatingCostPercent
+								chItem.PriceDiscountPercent = schedule.Rates.EffectiveCostPercent
+								chItem.EffectiveCostPercent = schedule.Rates.EffectiveCostPercent
+								chItem.MarkupDiscountRate = schedule.Rates.MarkupDiscountRate
+							} else {
+								chItem.ModelPrice = schedule.Pricing.ModelPrice
+								chItem.ModelRatio = schedule.Pricing.ModelRatio
+								chItem.CompletionRatio = schedule.Pricing.CompletionRatio
+								chItem.CacheRatio = schedule.Pricing.CacheRatio
+								chItem.CreateCacheRatio = schedule.Pricing.CreateCacheRatio
+								chItem.RequestTierPricing = schedule.Pricing.RequestTierPricing
+								chItem.QuotaType = schedule.Pricing.QuotaType
+							}
+							break
+						}
+					}
+				}
 			}
 			if doc, ok := channelDocMap[channelModelDocKey(row.ChannelID, modelName)]; ok {
 				chItem.DocConfigured = true
@@ -367,7 +492,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				chItem.DocIntroductionEn = p.DocIntroductionEn
 				chItem.ApiDocs = p.ApiDocs
 			}
-			if hasRequestTierPricing {
+			if hasRequestTierPricing && (chItem.TimePricing == nil || !chItem.TimePricing.Active) {
 				chItem.RequestTierPricing = requestTierPricing
 			}
 			fillOptionChannelPricingFields(&chItem, row.ChannelID, modelName)
@@ -402,8 +527,14 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					SupplierType:   ch.SupplierType,
 				},
 			}
-			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
-			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+			if ch.TimePricing != nil {
+				item.VideoFlatClipHint, item.ImagePerImageHint = decorateTimePricingMediaHints(
+					ch.TimePricing, ch.ChannelID, modelName,
+				)
+			} else {
+				item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+				item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+			}
 			out = append(out, item)
 		}
 	}

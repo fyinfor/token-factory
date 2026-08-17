@@ -138,6 +138,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		}
 	}
 	appendSettlementDiscountSnapshotsFromPriceData(info.ChannelId, info.PriceData, other)
+	appendTimePricingInfo(info.PriceData, other)
 	if len(info.UpstreamTaskBillingOther) > 0 {
 		for k, v := range info.UpstreamTaskBillingOther {
 			if !isUpstreamVideoMetadataLogKey(k) {
@@ -269,6 +270,26 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 				other[k] = v
 			}
 		}
+		if bc.TimePricingPlanID > 0 {
+			other["time_pricing_schedule_id"] = bc.TimePricingScheduleID
+			other["time_pricing_plan_id"] = bc.TimePricingPlanID
+			other["time_pricing_plan_version"] = bc.TimePricingPlanVersion
+			other["time_pricing_schedule_name"] = bc.TimePricingScheduleName
+			other["time_pricing_plan_name"] = bc.TimePricingPlanName
+			other["time_pricing_timezone"] = bc.TimePricingTimezone
+			if bc.TimePricingWeekdays > 0 && bc.TimePricingStartMinute != bc.TimePricingEndMinute {
+				other["time_pricing_weekdays"] = bc.TimePricingWeekdays
+				other["time_pricing_start_minute"] = bc.TimePricingStartMinute
+				other["time_pricing_end_minute"] = bc.TimePricingEndMinute
+				if bc.TimePricingEffectiveFrom != "" {
+					other["time_pricing_effective_from"] = bc.TimePricingEffectiveFrom
+				}
+				if bc.TimePricingEffectiveTo != "" {
+					other["time_pricing_effective_to"] = bc.TimePricingEffectiveTo
+				}
+			}
+			other["time_pricing_matched_at"] = bc.TimePricingMatchedAt
+		}
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {
@@ -379,8 +400,22 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 	if modelName == "" {
 		return nil
 	}
-	rules, ok := ratio_setting.GetChannelVideoPricingRules(info.ChannelId, modelName)
-	if !ok || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+	var rules ratio_setting.VideoPricingRules
+	var ok bool
+	hasIndependentTimePricing := false
+	if info.PriceData.TimePricingPlanID > 0 && strings.TrimSpace(info.PriceData.TimePricingPayload) != "" {
+		if payload, err := model.ParseChannelModelPricePlanPayload(info.PriceData.TimePricingPayload); err == nil && payload.ResolvedMode() == model.ChannelModelPricePlanModePrice {
+			hasIndependentTimePricing = true
+			if payload.VideoPricingRules != nil {
+				rules = *payload.VideoPricingRules
+				ok = ratio_setting.HasUsableVideoPerSecondRules(rules)
+			}
+		}
+	}
+	if !hasIndependentTimePricing {
+		rules, ok = ratio_setting.GetChannelVideoPricingRules(info.ChannelId, modelName)
+	}
+	if !hasIndependentTimePricing && (!ok || !ratio_setting.HasUsableVideoPerSecondRules(rules)) {
 		var globalOK bool
 		rules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
 		if !globalOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
@@ -472,8 +507,22 @@ func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 	if modelName == "" {
 		return nil
 	}
-	rules, ok := ratio_setting.GetChannelVideoPricingRules(info.ChannelId, modelName)
-	if !ok || !ratio_setting.HasUsableVideoPerTokenRules(rules) {
+	var rules ratio_setting.VideoPricingRules
+	var ok bool
+	hasIndependentTimePricing := false
+	if info.PriceData.TimePricingPlanID > 0 && strings.TrimSpace(info.PriceData.TimePricingPayload) != "" {
+		if payload, err := model.ParseChannelModelPricePlanPayload(info.PriceData.TimePricingPayload); err == nil && payload.ResolvedMode() == model.ChannelModelPricePlanModePrice {
+			hasIndependentTimePricing = true
+			if payload.VideoPricingRules != nil {
+				rules = *payload.VideoPricingRules
+				ok = ratio_setting.HasUsableVideoPerTokenRules(rules)
+			}
+		}
+	}
+	if !hasIndependentTimePricing {
+		rules, ok = ratio_setting.GetChannelVideoPricingRules(info.ChannelId, modelName)
+	}
+	if !hasIndependentTimePricing && (!ok || !ratio_setting.HasUsableVideoPerTokenRules(rules)) {
 		var globalOK bool
 		rules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
 		if !globalOK || !ratio_setting.HasUsableVideoPerTokenRules(rules) {
@@ -583,6 +632,18 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 		detail.ChannelDiscountPercent = model.ResolveChannelEffectiveCostPercent(task.ChannelId)
 	}
 	fillVideoPerTokenEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.TimePricingPlanID > 0 {
+		detail.GlobalPricePerMillion = bc.VideoGlobalRulePrice
+		if bc.MarkupDiscountPercent != nil {
+			detail.MarkupDiscountPercent = *bc.MarkupDiscountPercent
+		}
+		detail.EffectivePricePerMillion = effectiveVideoPerSecondUSD(
+			detail.PricePerMillionTokens,
+			detail.GlobalPricePerMillion,
+			detail.ChannelDiscountPercent,
+			detail.MarkupDiscountPercent,
+		)
+	}
 	return detail
 }
 

@@ -9,7 +9,19 @@ import (
 // ResolveEffectiveMarkupDiscountPercentForInviteeBilling 返回本次计费应使用的加价折扣率（百分数）。
 // 非利润分成模式、或用户非分销商邀请链下被邀请人时，回退为渠道默认加价折扣率。
 func ResolveEffectiveMarkupDiscountPercentForInviteeBilling(inviteeUserId, channelId int, originModelName string) float64 {
-	base := ResolveChannelMarkupDiscountRate(channelId)
+	return ResolveEffectiveMarkupDiscountPercentForInviteeBillingWithBase(
+		inviteeUserId,
+		channelId,
+		originModelName,
+		ResolveChannelMarkupDiscountRate(channelId),
+	)
+}
+
+// ResolveEffectiveMarkupDiscountPercentForInviteeBillingWithBase 与
+// ResolveEffectiveMarkupDiscountPercentForInviteeBilling 相同，但允许调用方提供
+// 渠道默认加价率的临时覆盖值（例如分时动态费率）。被邀请人的独立配置仍保持最高优先级。
+func ResolveEffectiveMarkupDiscountPercentForInviteeBillingWithBase(inviteeUserId, channelId int, originModelName string, base float64) float64 {
+	base = clampChannelMarkupDiscountRate(base)
 	if inviteeUserId <= 0 || channelId <= 0 {
 		return base
 	}
@@ -80,7 +92,32 @@ func ApplyInviteeMarkupToPricingAPIForUser(inviteeUserId int, pricingData []Pric
 			if ch.ChannelID <= 0 {
 				continue
 			}
-			ch.MarkupDiscountRate = ResolveEffectiveMarkupDiscountPercentForInviteeBilling(inviteeUserId, ch.ChannelID, modelName)
+			ch.MarkupDiscountRate = ResolveEffectiveMarkupDiscountPercentForInviteeBillingWithBase(
+				inviteeUserId,
+				ch.ChannelID,
+				modelName,
+				ch.MarkupDiscountRate,
+			)
+			if ch.TimePricing != nil {
+				ch.TimePricing.RegularRates.MarkupDiscountRate = ResolveEffectiveMarkupDiscountPercentForInviteeBillingWithBase(
+					inviteeUserId,
+					ch.ChannelID,
+					modelName,
+					ch.TimePricing.RegularRates.MarkupDiscountRate,
+				)
+				for scheduleIndex := range ch.TimePricing.Schedules {
+					schedule := &ch.TimePricing.Schedules[scheduleIndex]
+					if schedule.Rates == nil {
+						continue
+					}
+					schedule.Rates.MarkupDiscountRate = ResolveEffectiveMarkupDiscountPercentForInviteeBillingWithBase(
+						inviteeUserId,
+						ch.ChannelID,
+						modelName,
+						schedule.Rates.MarkupDiscountRate,
+					)
+				}
+			}
 		}
 		// 定价 data 按「模型×单渠道」展开，重算分档 hint 使首页卡片/侧栏与实扣一致。
 		if len(pricingData[i].ChannelList) == 1 {

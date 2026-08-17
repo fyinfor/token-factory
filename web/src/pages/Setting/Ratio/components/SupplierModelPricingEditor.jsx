@@ -20,6 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Empty, Select, Tag } from '@douyinfe/semi-ui';
 import { API, showError } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
+import ChannelTimePricingPanel from './ChannelTimePricingPanel';
 import ModelPricingEditor from './ModelPricingEditor';
 
 const parseJSON = (text) => {
@@ -48,6 +49,7 @@ export default function SupplierModelPricingEditor({
 }) {
   const { t } = useTranslation();
   const [channelId, setChannelId] = useState('all');
+  const [selectedModelName, setSelectedModelName] = useState('');
   const [channelModelNamesMap, setChannelModelNamesMap] = useState({});
   /** 供应商渠道定价 GET /api/user/supplier/pricing/channel/:id 返回的 maps */
   const [supplierChannelMaps, setSupplierChannelMaps] = useState(null);
@@ -236,6 +238,11 @@ export default function SupplierModelPricingEditor({
   );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
+
+  const handleChannelChange = useCallback((value) => {
+    setChannelId(String(value || 'all'));
+    setSelectedModelName('');
+  }, []);
 
   // parseChannelModelNamesFromChannelData 解析渠道详情中的模型列表（逗号分隔）。
   const parseChannelModelNamesFromChannelData = (channelData) => {
@@ -685,7 +692,7 @@ export default function SupplierModelPricingEditor({
             <Select
               style={{ width: '100%', maxWidth: 380 }}
               value={channelId}
-              onChange={setChannelId}
+              onChange={handleChannelChange}
               filter={filterChannelOption}
               searchPosition='dropdown'
               dropdownClassName='supplier-channel-pricing-select-dropdown'
@@ -712,18 +719,26 @@ export default function SupplierModelPricingEditor({
               description={t('选择后即可编辑该渠道的模型输入/固定价格')}
             />
           ) : (
-            <ModelPricingEditor
-              options={scopedOptions}
-              refresh={refresh}
-              candidateModelNames={channelScopedCandidateModelNames}
-              forceCandidateModelNames
-              filterMode={filterMode}
-              listDescription={listDescription}
-              onSaveOutput={handleSaveOutput}
-              optionKeys={{
-                ModelRequestTierPricing: 'ModelRequestTierPricing',
-              }}
-            />
+            <>
+              <ModelPricingEditor
+                options={scopedOptions}
+                refresh={refresh}
+                candidateModelNames={channelScopedCandidateModelNames}
+                forceCandidateModelNames
+                filterMode={filterMode}
+                listDescription={listDescription}
+                onSaveOutput={handleSaveOutput}
+                onSelectedModelChange={setSelectedModelName}
+                optionKeys={{
+                  ModelRequestTierPricing: 'ModelRequestTierPricing',
+                }}
+              />
+              <ChannelTimePricingPanel
+                channelId={activeChannelId}
+                modelName={selectedModelName}
+                options={scopedOptions}
+              />
+            </>
           )}
         </>
       )}

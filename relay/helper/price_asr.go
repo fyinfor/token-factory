@@ -35,13 +35,17 @@ func ModelPriceHelperASR(c *gin.Context, info *relaycommon.RelayInfo, seconds fl
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
 
+	timePricing := resolveChannelModelTimePricing(c, channelID, info.OriginModelName)
 	modelPrice, ok := ratio_setting.GetASRPrice(info.OriginModelName)
+	if usesIndependentTimePricing(timePricing) && timePricing.Payload.ASRPrice != nil {
+		modelPrice = *timePricing.Payload.ASRPrice
+		ok = true
+	}
 	if !ok || modelPrice <= 0 {
 		return types.PriceData{}, fmt.Errorf("模型 %s 未配置 ASR 按秒价格（ASRPrice），请联系管理员在模型定价页面设置；Model %s ASR per-second price not set, please contact the administrator", info.OriginModelName, info.OriginModelName)
 	}
 
-	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	rawDisc, operatingCost, chDisc, markupDisc := resolveChannelBillingPercents(c, info, channelID, info.OriginModelName, timePricing)
 
 	// 预扣额度 = 每秒单价 × 成本/加价折扣 × QuotaPerUnit × 分组倍率 × 预估秒数。
 	// ASR 仅有全局 ASRPrice，无独立渠道价表：渠道价与全局价均取该单价，
@@ -82,6 +86,7 @@ func ModelPriceHelperASR(c *gin.Context, info *relaycommon.RelayInfo, seconds fl
 	if estSeconds > 0 {
 		priceData.AddOtherRatio("seconds", estSeconds)
 	}
+	attachChannelModelTimePricing(&priceData, timePricing)
 	info.PriceData = priceData
 	return priceData, nil
 }

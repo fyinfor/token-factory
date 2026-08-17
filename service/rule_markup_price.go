@@ -198,3 +198,30 @@ func EffectiveVideoPerSecondUSDForDimensions(
 	effUSD = effectiveVideoPerSecondUSD(channelUSD, globalUSD, costDiscPercent, markupDiscPercent)
 	return effUSD, channelUSD, globalUSD, true
 }
+
+// EffectiveVideoPerSecondUSDForPricingRules evaluates an explicit scheduled
+// channel plan while preserving the official global tier for markup display
+// and the existing effective-price formula.
+func EffectiveVideoPerSecondUSDForPricingRules(
+	rules ratio_setting.VideoPricingRules,
+	modelName, mode string,
+	width, height int,
+	hasAudio bool,
+	costDiscPercent, markupDiscPercent float64,
+	resolutionLabel string,
+) (effUSD, channelUSD, globalUSD float64, ok bool) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+		return 0, 0, 0, false
+	}
+	match, okMatch := MatchVideoPerSecondUnitPrice(rules, mode, width, height, hasAudio, resolutionLabel)
+	if !okMatch || match.PricePerSecond <= 0 {
+		return 0, 0, 0, false
+	}
+	channelUSD = match.PricePerSecond
+	globalUSD = globalVideoPerSecondUSDForChannelTier(
+		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, hasAudio, match.UnifiedAudio,
+	)
+	effUSD = effectiveVideoPerSecondUSD(channelUSD, globalUSD, costDiscPercent, markupDiscPercent)
+	return effUSD, channelUSD, globalUSD, effUSD > 0
+}

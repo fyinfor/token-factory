@@ -14,17 +14,18 @@ import (
 // 补差价并将 Quota 更新为实际额度；BilledAt 作为结算幂等键；
 // 识别文本缓存于 ResultText，避免上游 transcription_url 过期后结果永久丢失。
 type AsrTask struct {
-	ID             int64   `json:"id" gorm:"primary_key;AUTO_INCREMENT"`
-	TaskID         string  `json:"task_id" gorm:"type:varchar(64);uniqueIndex"`     // 对外公开任务 ID（网关生成）
-	UpstreamTaskID string  `json:"upstream_task_id" gorm:"type:varchar(128);index"` // 上游 DashScope task_id
-	UserID         int     `json:"user_id" gorm:"index"`
-	TokenID        int     `json:"token_id" gorm:"index"`
-	ChannelID      int     `json:"channel_id" gorm:"index"`
-	Model          string  `json:"model" gorm:"type:varchar(128)"`
-	AudioURL       string  `json:"audio_url" gorm:"type:text"`
+	ID                int64   `json:"id" gorm:"primary_key;AUTO_INCREMENT"`
+	TaskID            string  `json:"task_id" gorm:"type:varchar(64);uniqueIndex"`     // 对外公开任务 ID（网关生成）
+	UpstreamTaskID    string  `json:"upstream_task_id" gorm:"type:varchar(128);index"` // 上游 DashScope task_id
+	UserID            int     `json:"user_id" gorm:"index"`
+	TokenID           int     `json:"token_id" gorm:"index"`
+	ChannelID         int     `json:"channel_id" gorm:"index"`
+	Model             string  `json:"model" gorm:"type:varchar(128)"`
+	AudioURL          string  `json:"audio_url" gorm:"type:text"`
 	Status            string  `json:"status" gorm:"type:varchar(16);index"` // dto.ASRTaskStatus*
 	Quota             int     `json:"quota"`                                // 提交时=预扣额度；结算后=实际额度
 	QuotaLogged       int     `json:"quota_logged"`                         // 已写入预扣消费日志的额度；0=旧任务未写预扣日志
+	PriceDataSnapshot string  `json:"-" gorm:"type:text"`                   // 提交时价格快照，异步结算不得重新命中时段价格
 	AudioSeconds      float64 `json:"audio_seconds"`
 	ResultText        string  `json:"result_text" gorm:"type:text"`
 	ResultTranscripts string  `json:"result_transcripts" gorm:"type:text"` // JSON: []dto.ASRTranscript

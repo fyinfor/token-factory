@@ -126,3 +126,60 @@ func TestRecalcVideoPerSecondQuota_GlobalFallbackAppliesCostDiscount(t *testing.
 	require.InDelta(t, wantEff, detail.EffectivePricePerSecond, 1e-9)
 	require.NotEqual(t, task.Quota, quota, "须相对原价预扣发生差额纠正")
 }
+
+func TestRecalcVideoPerSecondQuota_TimePricingUsesSubmitSnapshots(t *testing.T) {
+	prevGlobal := ratio_setting.VideoPricingRules2JSONString()
+	t.Cleanup(func() {
+		_ = ratio_setting.UpdateVideoPricingRulesByJSONString(prevGlobal)
+	})
+
+	const (
+		modelName     = "time-pricing-video-snapshot"
+		planPerSecond = 0.1
+		submitGlobal  = 0.2
+		currentGlobal = 0.9
+		markupPercent = 50.0
+		resolution    = "720p"
+		seconds       = 4
+	)
+	require.NoError(t, ratio_setting.UpdateVideoPricingRulesByJSONString(
+		`{"`+modelName+`":{"text_to_video_per_second":[{"resolution":"`+resolution+`","has_audio":true,"price":`+
+			strconv.FormatFloat(currentGlobal, 'g', -1, 64)+`}]}}`,
+	))
+	planRules := ratio_setting.VideoPricingRules{
+		TextToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{{
+			Resolution: resolution, HasAudio: true, Price: planPerSecond,
+		}},
+	}
+	payload, err := (model.ChannelModelPricePlanPayload{VideoPricingRules: &planRules}).MarshalJSONString()
+	require.NoError(t, err)
+
+	req := relaycommon.TaskSubmitReq{
+		Model: modelName, Prompt: "test", Resolution: resolution, Seconds: strconv.Itoa(seconds),
+		Metadata: map[string]any{"resolution": resolution, "has_audio": true},
+	}
+	reqBytes, err := common.Marshal(req)
+	require.NoError(t, err)
+	costPercent := 100.0
+	markupCopy := markupPercent
+	task := &model.Task{
+		TaskID: "task_time_pricing_snapshot", UserId: 1, ChannelId: 42,
+		Status:     model.TaskStatusSuccess,
+		Properties: model.Properties{Input: string(reqBytes), OriginModelName: modelName},
+		PrivateData: model.TaskPrivateData{BillingContext: &model.TaskBillingContext{
+			GroupRatio: 1, OriginModelName: modelName,
+			OtherRatios:          map[string]float64{"seconds": seconds},
+			EffectiveCostPercent: &costPercent, MarkupDiscountPercent: &markupCopy,
+			VideoGlobalRulePrice: submitGlobal,
+			TimePricingPlanID:    1, TimePricingPayload: payload,
+		}},
+	}
+	taskResult := &relaycommon.TaskInfo{Status: string(model.TaskStatusSuccess), Duration: seconds, Resolution: resolution}
+
+	quota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
+	require.NotNil(t, detail)
+	wantEffective := model.EffectiveRuleUnitPrice(planPerSecond, submitGlobal, costPercent, markupPercent)
+	require.InDelta(t, submitGlobal, detail.GlobalPricePerSecond, 1e-9)
+	require.InDelta(t, wantEffective, detail.EffectivePricePerSecond, 1e-9)
+	require.Equal(t, int(float64(seconds)*wantEffective*common.QuotaPerUnit), quota)
+}

@@ -434,11 +434,13 @@ func pickMinEffectiveVideoDisplayTier(tiers []videoFlatTier, globalRules ratio_s
 	return tiers[bestIdx], bestUsd, true
 }
 
-// BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按 token，否则按秒，否则按条），
-// 返回最低价档（含成本折扣与加价折扣）及总档位数。
-func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *VideoFlatClipPricingHint {
-	channelRules, chOK := resolveChannelVideoRulesForPricingCardHint(channelID, modelName)
-	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
+func buildVideoFlatClipHintFromRules(
+	channelRules ratio_setting.VideoPricingRules,
+	chOK bool,
+	globalRules ratio_setting.VideoPricingRules,
+	glOK bool,
+	costDiscPercent, markupDiscPercent float64,
+) *VideoFlatClipPricingHint {
 	if !chOK && !glOK {
 		return nil
 	}
@@ -480,4 +482,81 @@ func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, ma
 		Tiers:                      rows,
 		BillingMode:                billingMode,
 	}
+}
+
+func buildVideoFlatClipHintFromFlatPrice(
+	channelPrice, globalPrice, costDiscPercent, markupDiscPercent float64,
+) *VideoFlatClipPricingHint {
+	if channelPrice <= 0 {
+		channelPrice = globalPrice
+	}
+	if channelPrice <= 0 {
+		return nil
+	}
+	effectivePrice := EffectiveRuleUnitPrice(
+		channelPrice,
+		globalPrice,
+		costDiscPercent,
+		markupDiscPercent,
+	)
+	if effectivePrice <= 0 {
+		return nil
+	}
+	return &VideoFlatClipPricingHint{
+		MinUsdAfterChannelDiscount: effectivePrice,
+		Lane:                       "video_flat",
+		TierCount:                  1,
+		Tiers: []VideoFlatClipTierRow{{
+			UsdAfterChannelDiscount: effectivePrice,
+			UsdChannelRaw:           channelPrice,
+			UsdOfficial:             globalPrice,
+			Lane:                    "video_flat",
+		}},
+		BillingMode: "per_item",
+	}
+}
+
+// BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按 token，否则按秒，否则按条），
+// 返回最低价档（含成本折扣与加价折扣）及总档位数。
+func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *VideoFlatClipPricingHint {
+	channelRules, chOK := resolveChannelVideoRulesForPricingCardHint(channelID, modelName)
+	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
+	if hint := buildVideoFlatClipHintFromRules(
+		channelRules, chOK, globalRules, glOK, costDiscPercent, markupDiscPercent,
+	); hint != nil {
+		return hint
+	}
+	channelPrice, _ := ratio_setting.GetChannelVideoPrice(channelID, modelName)
+	globalPrice, _ := ratio_setting.GetVideoPrice(modelName)
+	return buildVideoFlatClipHintFromFlatPrice(
+		channelPrice, globalPrice, costDiscPercent, markupDiscPercent,
+	)
+}
+
+// BuildVideoFlatClipHintForTimePricingPayload builds the card/sidebar summary
+// from an independent time-pricing snapshot instead of re-reading the regular
+// channel rules. This keeps the displayed active price aligned with billing.
+func BuildVideoFlatClipHintForTimePricingPayload(
+	modelName string,
+	payload ChannelModelPricePlanPayload,
+	costDiscPercent, markupDiscPercent float64,
+) *VideoFlatClipPricingHint {
+	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
+	if payload.VideoPricingRules != nil && videoRulesUsableForPricingHint(*payload.VideoPricingRules) {
+		return buildVideoFlatClipHintFromRules(
+			*payload.VideoPricingRules,
+			true,
+			globalRules,
+			glOK,
+			costDiscPercent,
+			markupDiscPercent,
+		)
+	}
+	if payload.VideoPrice == nil || *payload.VideoPrice <= 0 {
+		return nil
+	}
+	globalPrice, _ := ratio_setting.GetVideoPrice(modelName)
+	return buildVideoFlatClipHintFromFlatPrice(
+		*payload.VideoPrice, globalPrice, costDiscPercent, markupDiscPercent,
+	)
 }
