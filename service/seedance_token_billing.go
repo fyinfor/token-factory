@@ -8,7 +8,7 @@ package service
 // 不再依赖模型基础价格里的输出倍率/输出价格（completionRatio）。
 //
 // 业务流程：
-//   · 任务发起：预扣固定 50000 tokens，按匹配分辨率单价（美元/1M tokens）折算额度；
+//   · 任务发起：按 ratio+档位+时长动态计算预扣 tokens，再按匹配分辨率单价（美元/1M tokens）折算额度；
 //   · 任务完成：按上游 usage.total_tokens ÷ 1M × 同一单价补差，并更新日志。
 // ============================================================================
 
@@ -25,7 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
-// SeedanceTokenPreConsumeTokens 任务发起阶段预扣的固定 Token 数（不估算真实 token）。
+// SeedanceTokenPreConsumeTokens 映射不到 ratio/档位时的预扣回退 Token 数。
 const SeedanceTokenPreConsumeTokens = 50000
 
 // SeedanceVideoTokenBillingMode 日志 billing_mode，前端按 token 单价展示。

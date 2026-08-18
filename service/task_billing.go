@@ -23,7 +23,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	tokenName := c.GetString("token_name")
 	logContent := fmt.Sprintf("操作 %s", info.Action)
 
-	// 视频按 token 规则计费：per_token 表 + 预扣固定 token。
+	// 视频按 token 规则计费：per_token 表 + 按 ratio/档位/时长动态预扣 token。
 	isVideoPerTokenRuleBilling := info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoRuleUnit == VideoRuleUnitPerToken &&

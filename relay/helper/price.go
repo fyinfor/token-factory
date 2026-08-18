@@ -534,7 +534,7 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 	}
 
 	// 0) 视频「按 Token 计费」（最高优先级）：视频价格配置为 per_token 规则且与当前请求
-	//    （文生/图生/视频生 + 分辨率）匹配时生效；预扣固定 50000 Token，完成后按 total_tokens 补差。
+	//    （文生/图生/视频生 + 分辨率）匹配时生效；预扣按 ratio+档位+时长动态计算 Token，完成后按 total_tokens 补差。
 	if priceData, ok := tryVideoPerTokenRulesPriceData(c, info); ok {
 		return priceData, nil
 	}
@@ -589,7 +589,7 @@ func hasAnyPerCallVideoPrice(channelID, supplierID int, group, modelName string)
 // tryVideoPerTokenRulesPriceData 视频「按 token 规则」预扣价格计算。
 //
 // 触发条件：VideoPricingRules 配置了 *_per_token 且与当前请求（素材类型 + 分辨率）匹配。
-// 预扣额度 = 50000 ÷ 1M × 美元/1M tokens × QuotaPerUnit × 分组倍率。
+// 预扣额度 = 动态预扣 tokens ÷ 1M × 美元/1M tokens × QuotaPerUnit × 分组倍率。
 func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, bool) {
 	channelID := 0
 	if info.ChannelMeta != nil {
@@ -607,6 +607,7 @@ func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 	resolutionLabel := ""
 	if req, err := relaycommon.GetTaskRequest(c); err == nil {
 		resolutionLabel = service.VideoBillingResolutionLabelFromRequest(req)
+		preConsumeTokens = service.CalcSeedancePreConsumeTokensFromRequest(req)
 	}
 	var quota int
 	var match *service.VideoTokenRuleMatch
