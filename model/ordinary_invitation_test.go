@@ -16,6 +16,7 @@ func setupOrdinaryInvitationTestDB(t *testing.T) {
 	previousDB := DB
 	previousLogDB := LOG_DB
 	previousQuotaForInviter := common.QuotaForInviter
+	previousQuotaForDistributorInviter := common.QuotaForDistributorInviter
 	previousDefaultCommissionBps := common.AffiliateDefaultCommissionBps
 	previousCommissionMode := common.DistributorCommissionMode
 
@@ -29,6 +30,7 @@ func setupOrdinaryInvitationTestDB(t *testing.T) {
 	DB = db
 	LOG_DB = db
 	common.QuotaForInviter = 500
+	common.QuotaForDistributorInviter = 0
 	common.AffiliateDefaultCommissionBps = 1000
 	common.DistributorCommissionMode = common.DistributorCommissionModeTopup
 	require.NoError(t, DB.AutoMigrate(&User{}, &OrdinaryInviteRelation{}, &AffInviteRelation{}, &AffInviteCommissionLog{}, &Log{}))
@@ -37,6 +39,7 @@ func setupOrdinaryInvitationTestDB(t *testing.T) {
 		DB = previousDB
 		LOG_DB = previousLogDB
 		common.QuotaForInviter = previousQuotaForInviter
+		common.QuotaForDistributorInviter = previousQuotaForDistributorInviter
 		common.AffiliateDefaultCommissionBps = previousDefaultCommissionBps
 		common.DistributorCommissionMode = previousCommissionMode
 		_ = sqlDB.Close()
@@ -64,7 +67,7 @@ func TestOrdinaryInvitationRewardsThenOnlyFutureCommissionAfterUpgrade(t *testin
 	require.NoError(t, DB.Create(&invitee).Error)
 
 	require.NoError(t, CreateRegistrationInviteRelation(inviter.Id, invitee.Id, common.QuotaForInviter))
-	require.NoError(t, inviteUser(inviter.Id))
+	require.NoError(t, inviteUser(inviter.Id, RegistrationInviteRewardQuota(&inviter)))
 
 	var reloaded User
 	require.NoError(t, DB.First(&reloaded, inviter.Id).Error)
@@ -150,6 +153,48 @@ func TestDistributorRegistrationCreatesOnlyDistributorRelation(t *testing.T) {
 	require.EqualValues(t, 1, affCount)
 	require.NoError(t, DB.First(&inviter, inviter.Id).Error)
 	require.Equal(t, 1, inviter.AffCount)
+}
+
+func TestRegistrationInviteRewardUsesSeparateUserAndDistributorSettings(t *testing.T) {
+	setupOrdinaryInvitationTestDB(t)
+
+	ordinary := User{
+		Username:  "ordinary-reward-inviter",
+		AffCode:   "ordinary-reward-code",
+		Role:      common.RoleCommonUser,
+		Status:    common.UserStatusEnabled,
+		Quota:     100,
+		GiftQuota: 20,
+	}
+	distributor := User{
+		Username:      "distributor-reward-inviter",
+		AffCode:       "distributor-reward-code",
+		Role:          common.RoleCommonUser,
+		Status:        common.UserStatusEnabled,
+		IsDistributor: common.DistributorFlagYes,
+		Quota:         100,
+		GiftQuota:     20,
+	}
+	require.NoError(t, DB.Create(&ordinary).Error)
+	require.NoError(t, DB.Create(&distributor).Error)
+
+	require.Equal(t, 500, RegistrationInviteRewardQuota(&ordinary))
+	require.Zero(t, RegistrationInviteRewardQuota(&distributor))
+	require.NoError(t, inviteUser(ordinary.Id, RegistrationInviteRewardQuota(&ordinary)))
+	require.NoError(t, inviteUser(distributor.Id, RegistrationInviteRewardQuota(&distributor)))
+
+	require.NoError(t, DB.First(&ordinary, ordinary.Id).Error)
+	require.Equal(t, 600, ordinary.Quota)
+	require.Equal(t, 520, ordinary.GiftQuota)
+	require.NoError(t, DB.First(&distributor, distributor.Id).Error)
+	require.Equal(t, 100, distributor.Quota)
+	require.Equal(t, 20, distributor.GiftQuota)
+
+	common.QuotaForDistributorInviter = 250
+	require.NoError(t, inviteUser(distributor.Id, RegistrationInviteRewardQuota(&distributor)))
+	require.NoError(t, DB.First(&distributor, distributor.Id).Error)
+	require.Equal(t, 350, distributor.Quota)
+	require.Equal(t, 270, distributor.GiftQuota)
 }
 
 func TestInvitationCodeOnlyAcceptsEnabledNonAdminUsers(t *testing.T) {
