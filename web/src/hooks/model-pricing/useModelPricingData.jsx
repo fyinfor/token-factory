@@ -192,6 +192,7 @@ export const useModelPricingData = (options = {}) => {
   const [selectedGroup, setSelectedGroup] = useState('all');
   const [showModelDetail, setShowModelDetail] = useState(false);
   const [selectedModel, setSelectedModel] = useState(null);
+  const [modelDetailSection, setModelDetailSection] = useState('general');
   const [filterGroup, setFilterGroup] = useState('all'); // 用于 Table 的可用分组筛选，"all" 表示不过滤
   const [filterQuotaType, setFilterQuotaType] = useState('all'); // 计费类型筛选: 'all' | 0 | 1
   const [filterEndpointType, setFilterEndpointType] = useState('all'); // 端点类型筛选: 'all' | string
@@ -854,10 +855,11 @@ export const useModelPricingData = (options = {}) => {
   };
 
   const openModelDetail = useCallback(
-    (model) => {
+    (model, section = 'general') => {
       const preferredHotChannelId = hotPrimaryChannelMap.get(
         String(model?.model_name || ''),
       );
+      setModelDetailSection(section === 'basic' ? 'basic' : 'general');
       setSelectedModel(
         preferredHotChannelId
           ? { ...model, preferred_hot_channel_id: preferredHotChannelId }
@@ -918,6 +920,8 @@ export const useModelPricingData = (options = {}) => {
     setShowModelDetail,
     selectedModel,
     setSelectedModel,
+    modelDetailSection,
+    setModelDetailSection,
     filterGroup,
     setFilterGroup,
     filterQuotaType,
