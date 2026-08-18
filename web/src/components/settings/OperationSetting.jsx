@@ -38,6 +38,7 @@ const OperationSetting = ({ activeSection = 'general' }) => {
     QuotaForNewUser: 0,
     PreConsumedQuota: 0,
     QuotaForInviter: 0,
+    QuotaForDistributorInviter: 0,
     QuotaForInvitee: 0,
     StudentApprovalRewardQuota: 0,
     AffiliateDefaultCommissionBps: '1000',

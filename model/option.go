@@ -189,6 +189,7 @@ func InitOptionMap() {
 	common.OptionMap["SMSLoginDailyLimit"] = strconv.Itoa(common.SMSLoginDailyLimit)
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
+	common.OptionMap["QuotaForDistributorInviter"] = strconv.Itoa(common.QuotaForDistributorInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
 	common.OptionMap["StudentApprovalRewardQuota"] = strconv.Itoa(common.StudentApprovalRewardQuota)
 	common.OptionMap["AffiliateDefaultCommissionBps"] = strconv.Itoa(common.AffiliateDefaultCommissionBps)
@@ -758,8 +759,11 @@ func updateOptionMap(key string, value string) (err error) {
 		// 站内额度整数；管理端以美元填写，提交前已按 QuotaPerUnit 换算（与 common.QuotaFromUSD 一致）
 		common.QuotaForNewUser, _ = strconv.Atoi(value)
 	case "QuotaForInviter":
-		// 站内额度整数；管理端以美元填写，提交前已按 QuotaPerUnit 换算（与 common.QuotaFromUSD 一致）
+		// 普通用户邀请奖励；管理端以美元填写，提交前已按 QuotaPerUnit 换算
 		common.QuotaForInviter, _ = strconv.Atoi(value)
+	case "QuotaForDistributorInviter":
+		// 代理邀请奖励；独立配置且默认不发放
+		common.QuotaForDistributorInviter, _ = strconv.Atoi(value)
 	case "QuotaForInvitee":
 		// 同上：被邀请人注册奖励写入 quota，存库为换算后的额度整数
 		common.QuotaForInvitee, _ = strconv.Atoi(value)

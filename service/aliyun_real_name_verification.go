@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -23,8 +22,6 @@ import (
 )
 
 const realNameVerificationValidity = 15 * time.Minute
-
-var realNameVerificationMessageMutex sync.Mutex
 
 type RealNameVerificationStatus struct {
 	Status        string  `json:"status"`
@@ -139,11 +136,6 @@ func GetAliyunRealNameVerificationStatus(ctx context.Context, launchToken string
 			return nil, err
 		}
 	}
-	if record.VerifiedAt != nil {
-		if messageErr := publishRealNameVerificationSuccessMessage(record); messageErr != nil {
-			common.SysLog("\u5b9e\u540d\u8ba4\u8bc1\u6210\u529f\u7ad9\u5185\u6d88\u606f\u8865\u53d1\u5931\u8d25: " + messageErr.Error())
-		}
-	}
 	return toRealNameVerificationStatus(record), nil
 }
 
@@ -167,11 +159,6 @@ func GetCurrentUserRealNameVerificationStatus(ctx context.Context, userId int) (
 	if record.Status == model.RealNameVerificationStatusPending && record.CertifyId != nil && *record.CertifyId != "" {
 		if err = refreshAliyunRealNameVerificationStatus(ctx, record); err != nil {
 			return nil, err
-		}
-	}
-	if record.VerifiedAt != nil {
-		if messageErr := publishRealNameVerificationSuccessMessage(record); messageErr != nil {
-			common.SysLog("\u5b9e\u540d\u8ba4\u8bc1\u6210\u529f\u7ad9\u5185\u6d88\u606f\u8865\u53d1\u5931\u8d25: " + messageErr.Error())
 		}
 	}
 	return toRealNameVerificationStatus(record), nil
@@ -228,12 +215,17 @@ func refreshAliyunRealNameVerificationStatus(ctx context.Context, record *model.
 				rewardQuota = int(math.Round(setting.AliyunRealNameVerificationRewardAmount * common.QuotaPerUnit))
 			}
 		}
+		statusChanged := false
 		err = model.DB.Transaction(func(tx *gorm.DB) error {
 			updates := map[string]any{"status": model.RealNameVerificationStatusPassed, "verified_at": now, "provider_code": providerCode}
 			changed := tx.Model(&model.RealNameVerification{}).Where("id = ? AND status = ?", record.Id, model.RealNameVerificationStatusPending).Updates(updates)
-			if changed.Error != nil || changed.RowsAffected == 0 {
+			if changed.Error != nil {
 				return changed.Error
 			}
+			if changed.RowsAffected == 0 {
+				return nil
+			}
+			statusChanged = true
 			if rewardQuota > 0 {
 				if err := tx.Model(&model.User{}).Where("id = ?", record.UserId).Updates(map[string]any{"quota": gorm.Expr("quota + ?", rewardQuota), "gift_quota": gorm.Expr("gift_quota + ?", rewardQuota)}).Error; err != nil {
 					return err
@@ -247,15 +239,16 @@ func refreshAliyunRealNameVerificationStatus(ctx context.Context, record *model.
 		if err != nil {
 			return err
 		}
+		if !statusChanged {
+			return model.DB.Where("id = ?", record.Id).First(record).Error
+		}
 		record.Status = model.RealNameVerificationStatusPassed
 		record.VerifiedAt = &now
 		if rewardQuota > 0 {
 			record.RewardQuota = rewardQuota
 			record.RewardedAt = &now
 		}
-		if err := publishRealNameVerificationSuccessMessage(record); err != nil {
-			common.SysLog("\u5b9e\u540d\u8ba4\u8bc1\u6210\u529f\u7ad9\u5185\u6d88\u606f\u53d1\u9001\u5931\u8d25: " + err.Error())
-		}
+		recordRealNameVerificationRewardLog(record)
 		return nil
 	case "F":
 		err = model.DB.Model(&model.RealNameVerification{}).Where("id = ? AND status = ?", record.Id, model.RealNameVerificationStatusPending).Updates(map[string]any{"status": model.RealNameVerificationStatusFailed, "provider_code": providerCode}).Error
@@ -268,42 +261,15 @@ func refreshAliyunRealNameVerificationStatus(ctx context.Context, record *model.
 	}
 }
 
-func publishRealNameVerificationSuccessMessage(record *model.RealNameVerification) error {
-	if record == nil || record.UserId <= 0 || record.VerifiedAt == nil {
-		return errors.New("\u8ba4\u8bc1\u8bb0\u5f55\u65e0\u6548")
+func recordRealNameVerificationRewardLog(record *model.RealNameVerification) {
+	if record == nil || record.UserId <= 0 || record.RewardQuota <= 0 {
+		return
 	}
-	realNameVerificationMessageMutex.Lock()
-	defer realNameVerificationMessageMutex.Unlock()
-	title := "\u5b9e\u540d\u8ba4\u8bc1\u6210\u529f"
-	content := "\u4f60\u7684\u5b9e\u540d\u8ba4\u8bc1\u5df2\u6210\u529f\u5b8c\u6210\uff0c\u8d26\u6237\u5df2\u901a\u8fc7\u963f\u91cc\u4e91\u91d1\u878d\u7ea7\u5b9e\u4eba\u8ba4\u8bc1\u3002"
-	if record.RewardQuota > 0 {
-		content += fmt.Sprintf("\u672c\u6b21\u8ba4\u8bc1\u5956\u52b1 %s \u5df2\u53d1\u653e\u81f3\u8d60\u9001\u4f59\u989d\u3002", strings.TrimSuffix(logger.LogQuotaManage(record.RewardQuota), " 额度"))
-	}
-	var existing model.UserMessage
-	err := model.DB.Where(
-		"receiver_user_id = ? AND biz_type = ? AND biz_id = ?",
-		record.UserId, "real_name_verification", record.Id,
-	).First(&existing).Error
-	if err == nil {
-		if existing.Title == title && existing.Content == content {
-			return nil
-		}
-		return model.DB.Model(&existing).Updates(map[string]any{
-			"title":   title,
-			"content": content,
-		}).Error
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-	return PublishUserMessage(&model.UserMessage{
-		ReceiverUserID: record.UserId,
-		Type:           "real_name_verification_passed",
-		Title:          title,
-		Content:        content,
-		BizType:        "real_name_verification",
-		BizID:          record.Id,
-	})
+	model.RecordLog(
+		record.UserId,
+		model.LogTypeSystem,
+		fmt.Sprintf("\u5b9e\u540d\u8ba4\u8bc1\u6210\u529f\uff0c\u5956\u52b1 %s \u5df2\u53d1\u653e\u81f3\u8d60\u9001\u4f59\u989d", logger.LogQuotaConcise(record.RewardQuota)),
+	)
 }
 
 func newAliyunRealNameVerificationClient() (*cloudauth.Client, error) {
