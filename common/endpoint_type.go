@@ -66,7 +66,8 @@ func GetEndpointTypesByChannelTypeWithTags(channelType int, modelName string, mo
 	case constant.ChannelTypeAliASRSync:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliASRSync}
 	case constant.ChannelTypeAliASRAsync:
-		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliASRAsync}
+		// 异步渠道同时支持异步提交与同步等待（内部仍走上游异步任务）。
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliASRAsync, constant.EndpointTypeAliASRSync}
 	default:
 		if IsOpenAIResponseOnlyModel(modelName) {
 			endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIResponse}

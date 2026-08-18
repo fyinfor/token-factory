@@ -131,7 +131,8 @@ var SMSLoginCooldownSeconds = 60
 var SMSLoginDailyLimit = 5
 
 var QuotaForNewUser = 0
-var QuotaForInviter = 0
+var QuotaForInviter = 0            // 普通用户邀请新用户奖励
+var QuotaForDistributorInviter = 0 // 代理邀请新用户奖励，默认不发放
 var QuotaForInvitee = 0
 
 // StudentApprovalRewardQuota: 学员申请审批通过时赠送给用户的额度（内部 quota 单位）。

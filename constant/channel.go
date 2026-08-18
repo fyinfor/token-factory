@@ -242,8 +242,10 @@ func IsASRChannel(channelType int) bool {
 	return channelType == ChannelTypeAliASRSync || channelType == ChannelTypeAliASRAsync
 }
 
-// IsASRAsyncChannel reports whether the channel serves async ASR file
-// transcription (submit task -> poll -> fetch result) only.
+// IsASRAsyncChannel reports whether the channel serves Aliyun ASR file
+// transcription. Upstream is always async (submit → poll); the gateway may
+// expose it as POST /v1/audio/transcriptions/async or as a blocking
+// POST /v1/audio/transcriptions that waits for the result.
 func IsASRAsyncChannel(channelType int) bool {
 	return channelType == ChannelTypeAliASRAsync
 }
