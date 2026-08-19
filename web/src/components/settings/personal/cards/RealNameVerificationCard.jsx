@@ -10,7 +10,6 @@ import {
 import { getQuotaPerUnit } from '../../../../helpers/quota';
 import { useTranslation } from 'react-i18next';
 import { BadgeCheck, Check, Gift, ScanFace, ShieldCheck } from 'lucide-react';
-import { USER_MESSAGE_REFRESH_EVENT } from '../../../../hooks/common/useUserMessageUnreadCount';
 
 const statusConfig = {
   passed: {
@@ -62,12 +61,7 @@ export default function RealNameVerificationCard() {
       nextVerification.status === 'passed'
     ) {
       shouldNotifyPassedRef.current = false;
-      showSuccess(
-        t(
-          '\u5b9e\u540d\u8ba4\u8bc1\u6210\u529f\uff0c\u5956\u52b1\u5df2\u53d1\u653e',
-        ),
-      );
-      window.dispatchEvent(new Event(USER_MESSAGE_REFRESH_EVENT));
+      showSuccess(t('\u5b9e\u540d\u8ba4\u8bc1\u5b8c\u6210'));
     }
     if (['passed', 'failed', 'expired'].includes(nextVerification.status)) {
       shouldNotifyPassedRef.current = false;

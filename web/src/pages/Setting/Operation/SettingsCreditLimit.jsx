@@ -35,6 +35,7 @@ const CREDIT_LIMIT_FORM_KEYS = [
   'QuotaForNewUser',
   'PreConsumedQuota',
   'QuotaForInviter',
+  'QuotaForDistributorInviter',
   'QuotaForInvitee',
   'StudentApprovalRewardQuota',
   'quota_setting.enable_free_model_pre_consume',
@@ -44,6 +45,7 @@ const CREDIT_LIMIT_FORM_KEYS = [
 const USD_QUOTA_OPTION_KEYS = [
   'QuotaForNewUser',
   'QuotaForInviter',
+  'QuotaForDistributorInviter',
   'QuotaForInvitee',
   'StudentApprovalRewardQuota',
 ];
@@ -74,6 +76,7 @@ export default function SettingsCreditLimit(props) {
     QuotaForNewUser: '',
     PreConsumedQuota: '',
     QuotaForInviter: '',
+    QuotaForDistributorInviter: '',
     QuotaForInvitee: '',
     StudentApprovalRewardQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
@@ -192,7 +195,7 @@ export default function SettingsCreditLimit(props) {
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.InputNumber
-                  label={t('邀请新用户奖励额度')}
+                  label={t('普通用户邀请新用户奖励额度')}
                   field={'QuotaForInviter'}
                   step={0.01}
                   min={0}
@@ -209,8 +212,26 @@ export default function SettingsCreditLimit(props) {
                 />
               </Col>
             </Row>
-            <Row>
-              <Col xs={24} sm={12} md={8} lg={8} xl={6}>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('代理邀请新用户奖励额度')}
+                  field={'QuotaForDistributorInviter'}
+                  step={0.01}
+                  min={0}
+                  precision={6}
+                  suffix={'USD'}
+                  extraText={usdQuotaExtraText}
+                  placeholder={t('默认不发放')}
+                  onChange={(value) =>
+                    setInputs((currentInputs) => ({
+                      ...currentInputs,
+                      QuotaForDistributorInviter: value,
+                    }))
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.InputNumber
                   label={t('新用户使用邀请码奖励额度')}
                   field={'QuotaForInvitee'}
@@ -228,7 +249,7 @@ export default function SettingsCreditLimit(props) {
                   }
                 />
               </Col>
-              <Col xs={24} sm={12} md={8} lg={8} xl={6}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.InputNumber
                   label={t('学员审批赠送额度')}
                   field={'StudentApprovalRewardQuota'}

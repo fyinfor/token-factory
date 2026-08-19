@@ -712,7 +712,7 @@ func GetAffCode(c *gin.Context) {
 		"aff_count":                ordinaryInviteCount,
 		"ordinary_invite_count":    ordinaryInviteCount,
 		"distributor_invite_count": distributorInviteCount,
-		"inviter_reward_quota":     common.QuotaForInviter,
+		"inviter_reward_quota":     model.RegistrationInviteRewardQuota(user),
 		"invitee_reward_quota":     common.QuotaForInvitee,
 		"is_distributor":           model.UserIsDistributor(user),
 	})

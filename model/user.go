@@ -605,20 +605,40 @@ func HardDeleteUserById(id int) error {
 	return err
 }
 
+// RegistrationInviteRewardQuota 根据邀请人当前身份返回对应的注册邀请奖励。
+func RegistrationInviteRewardQuota(inviter *User) int {
+	if inviter == nil {
+		return 0
+	}
+	if UserIsDistributor(inviter) {
+		return common.QuotaForDistributorInviter
+	}
+	return common.QuotaForInviter
+}
+
+func getRegistrationInviteRewardQuota(inviterId int) (int, error) {
+	inviter, err := GetUserById(inviterId, true)
+	if err != nil {
+		return 0, err
+	}
+	return RegistrationInviteRewardQuota(inviter), nil
+}
+
 // inviteUser 在新用户通过邀请注册成功后调用，发放邀请人注册奖励。
 //
 // 说明：注册类邀请奖励与「分销充值提成」分流——后者仍通过 IncreaseUserAffCommissionQuota
 // 写入 aff_quota / aff_history；本函数不再触碰 aff_quota、aff_history，避免与分销待结算/历史统计混淆。
 // 历史已写入 aff_* 的数据不做迁移，仅新产生的注册奖励走 quota。
-func inviteUser(inviterId int) (err error) {
+func inviteUser(inviterId, reward int) (err error) {
 	if inviterId <= 0 {
 		return nil
 	}
 	if _, err = GetUserById(inviterId, true); err != nil {
 		return err
 	}
-
-	reward := common.QuotaForInviter
+	if reward <= 0 {
+		return nil
+	}
 	// 与 IncreaseUserQuota 一致：Batch 模式下额度写入走批处理队列，不能在事务内直接改 quota。
 	useBatchQuota := reward > 0 && common.BatchUpdateEnabled
 
@@ -806,15 +826,16 @@ func (user *User) Insert(inviterId int) error {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
-		_ = CreateRegistrationInviteRelation(inviterId, user.Id, common.QuotaForInviter)
+		inviterReward, _ := getRegistrationInviteRewardQuota(inviterId)
+		_ = CreateRegistrationInviteRelation(inviterId, user.Id, inviterReward)
 		if common.QuotaForInvitee > 0 {
 			_ = GrantUserGiftQuota(user.Id, common.QuotaForInvitee)
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
-		if common.QuotaForInviter > 0 {
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
+		if inviterReward > 0 {
+			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(inviterReward)))
 		}
-		_ = inviteUser(inviterId)
+		_ = inviteUser(inviterId, inviterReward)
 	}
 	createNewUserRewardMessage(user.Id, inviterId)
 	return nil
@@ -881,15 +902,16 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
-		_ = CreateRegistrationInviteRelation(inviterId, user.Id, common.QuotaForInviter)
+		inviterReward, _ := getRegistrationInviteRewardQuota(inviterId)
+		_ = CreateRegistrationInviteRelation(inviterId, user.Id, inviterReward)
 		if common.QuotaForInvitee > 0 {
 			_ = GrantUserGiftQuota(user.Id, common.QuotaForInvitee)
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
-		if common.QuotaForInviter > 0 {
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
+		if inviterReward > 0 {
+			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(inviterReward)))
 		}
-		_ = inviteUser(inviterId)
+		_ = inviteUser(inviterId, inviterReward)
 	}
 	createNewUserRewardMessage(user.Id, inviterId)
 }
