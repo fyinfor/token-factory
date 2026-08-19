@@ -88,9 +88,10 @@ const (
 	maasResultPath = "/v1/videos/generations/results"
 
 	// ARK result endpoint: <submitPath>/{id}, task_id baked into the path.
-	arkResultFmt      = "/v1/videos/generations/%s"
-	sophnetSubmitPath = "/videogenerator/generate"
-	sophnetResultFmt  = "/videogenerator/generate/%s"
+	arkResultFmt = "/v1/videos/generations/%s"
+	// VideoGenerator(59) 上游改为本站内部接口（原 /videogenerator/generate）。
+	sophnetSubmitPath = "/video/generations"
+	sophnetResultFmt  = "/video/generations/%s"
 
 	defaultRatio      = "adaptive"
 	defaultResolution = "480p"
@@ -353,6 +354,9 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	if info.ChannelType == constant.ChannelTypeTokenFactoryOpen {
 		a.protocol = ProtocolTokenFactory
 		info.TfOpenVideoUpstreamStyle = classifyTfOpenVideoClientPath(info.RequestURLPath)
+	} else if info.ChannelType == constant.ChannelTypeVideoGenerator {
+		// 与 base URL 是否仍含 /videogenerator 无关：渠道 59 固定走内部 /video/generations。
+		a.protocol = ProtocolSophnet
 	} else {
 		a.protocol = DetectProtocol(info.ChannelBaseUrl)
 	}
@@ -550,6 +554,10 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		if info != nil && (info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
 			return buildTokenFactoryOpenAIVideoPassthroughBody(c, info)
 		}
+	}
+	// TokenFactoryOpen 与 VideoGenerator(本站 /video/generations) 均使用 TaskSubmitReq，
+	// 必须带顶层 prompt；不可再转成 Ark 的 content[]，否则上游会返回 prompt is required。
+	if a.protocol == ProtocolTokenFactory || a.protocol == ProtocolSophnet {
 		raw, mErr := common.Marshal(req)
 		if mErr != nil {
 			return nil, mErr
@@ -558,7 +566,10 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		if err := common.Unmarshal(raw, &bodyMap); err != nil {
 			return nil, err
 		}
-		um := strings.TrimSpace(info.UpstreamModelName)
+		um := ""
+		if info != nil {
+			um = strings.TrimSpace(info.UpstreamModelName)
+		}
 		if um == "" {
 			um = strings.TrimSpace(req.Model)
 		}
@@ -628,15 +639,15 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		}
 		taskID = strings.TrimSpace(sub.Result.TaskID)
 	} else if a.protocol == ProtocolSophnet {
-		var sub sophnetSubmitResponse
-		if err := common.Unmarshal(decodedBody, &sub); err != nil {
-			return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
+		var parseErr error
+		var failMsg string
+		taskID, failMsg, parseErr = parseVideoGeneratorSubmit(decodedBody)
+		if parseErr != nil {
+			return "", nil, service.TaskErrorWrapper(errors.Wrapf(parseErr, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 		}
-		if sub.Status != 0 {
-			msg := firstNonEmpty(sub.Message, fmt.Sprintf("video upstream returned status=%d", sub.Status))
-			return "", nil, service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
+		if failMsg != "" {
+			return "", nil, service.TaskErrorWrapper(errors.New(failMsg), "video_submit_failed", http.StatusBadRequest)
 		}
-		taskID = strings.TrimSpace(sub.Result.TaskID)
 	} else if a.protocol == ProtocolTokenFactory && info != nil && IsTfOpenOpenAIVideosStyle(info.TfOpenVideoUpstreamStyle) {
 		var terr *dto.TaskError
 		taskID, terr = parseTfUpstreamSubmitTaskID(decodedBody)
@@ -947,8 +958,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	// FetchTask is invoked by the framework outside of Init, so we have to
 	// re-detect the protocol from baseUrl every time.
 	protocol := DetectProtocol(baseUrl)
-	if channelTypeFromFetchBody(body) == constant.ChannelTypeTokenFactoryOpen {
+	switch channelTypeFromFetchBody(body) {
+	case constant.ChannelTypeTokenFactoryOpen:
 		protocol = ProtocolTokenFactory
+	case constant.ChannelTypeVideoGenerator:
+		protocol = ProtocolSophnet
 	}
 	var uri string
 	if protocol == ProtocolMaaS {
@@ -982,6 +996,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	// 先识别本站 /video/generations 的两种回包（格式1 顶层任务 / 格式2 code+data.data），
+	// 避免格式2 被当成普通 Ark 而丢失嵌套 usage/content。
+	if ti, ok, err := parseVideoGenerationsCompatResult(respBody); ok {
+		return ti, err
+	}
 	normalized := normalizeOpenAIVideoPollJSON(respBody)
 	// Pick the parser via shape detection: MaaS responses carry top-level
 	// "code"/"result"; ARK responses carry top-level "id"/"status".
@@ -1236,6 +1255,10 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	ov := originTask.ToOpenAIVideo()
+
+	if applyVideoGenerationsCompatToOpenAIVideo(ov, originTask.Data) {
+		return common.Marshal(ov)
+	}
 
 	normalizedData := normalizeOpenAIVideoPollJSON(originTask.Data)
 	// Pick the parser via response shape detection, then surface URL/error.

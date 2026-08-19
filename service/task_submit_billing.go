@@ -177,11 +177,44 @@ func extractTotalTokensFromTaskData(taskData []byte) int {
 	if len(taskData) == 0 {
 		return 0
 	}
+	if n := extractVideoGenerationsCompatTokens(taskData); n > 0 {
+		return n
+	}
 	var payload any
 	if err := common.Unmarshal(taskData, &payload); err != nil {
 		return 0
 	}
 	return findTokenCount(payload)
+}
+
+// extractVideoGenerationsCompatTokens 按 /video/generations 两种回包提取计费用 token。
+// 格式1：顶层 usage.total_tokens；格式2：data.data.usage.completion_tokens 作为总数。
+func extractVideoGenerationsCompatTokens(taskData []byte) int {
+	var root map[string]any
+	if err := common.Unmarshal(taskData, &root); err != nil || root == nil {
+		return 0
+	}
+	if data, _ := root["data"].(map[string]any); data != nil {
+		if nested, _ := data["data"].(map[string]any); nested != nil {
+			if usage, _ := nested["usage"].(map[string]any); usage != nil {
+				if n := submitToInt(usage["completion_tokens"]); n > 0 {
+					return n
+				}
+				if n := submitToInt(usage["total_tokens"]); n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	if usage, _ := root["usage"].(map[string]any); usage != nil {
+		if n := submitToInt(usage["total_tokens"]); n > 0 {
+			return n
+		}
+		if n := submitToInt(usage["completion_tokens"]); n > 0 {
+			return n
+		}
+	}
+	return 0
 }
 
 func extractDurationFromTaskData(taskData []byte) int {

@@ -206,7 +206,7 @@ export const CHANNEL_OPTIONS = [
     {
         value: 59,
         color: 'purple',
-        label: 'OpenAI 视频 (/videogenerator/generate)',
+        label: 'OpenAI 视频 (/video/generations)',
     },
     {
         value: 60,
