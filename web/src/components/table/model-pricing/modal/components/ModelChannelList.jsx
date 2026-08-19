@@ -60,6 +60,7 @@ import PrecisePriceText, {
 import {
   pickVideoFlatClipHintForChannel,
   hasVideoFlatClipTierTable,
+  hasVideoUpscaleTierTable,
 } from '../../constants/videoFlatClipLaneI18n';
 import {
   pickImagePerImageHintForChannel,
@@ -1211,7 +1212,8 @@ const ModelChannelList = ({
     const channel = channelList[0];
     const channelItems = formatChannelInfo(channel);
     const vHint = pickVideoFlatClipHintForChannel(modelData, channel);
-    const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
+    const showVideoFlatTable =
+      hasVideoFlatClipTierTable(vHint) || hasVideoUpscaleTierTable(vHint);
     const iHint = pickImagePerImageHintForChannel(modelData, channel);
     const showImagePerImageTable = hasImagePerImageTierTable(iHint);
     const channelPath = getChannelRouteModelName(modelData, channel);
@@ -1649,7 +1651,8 @@ const ModelChannelList = ({
                         channel,
                       );
                       const showVideoFlatTable =
-                        hasVideoFlatClipTierTable(vHint);
+                        hasVideoFlatClipTierTable(vHint) ||
+                        hasVideoUpscaleTierTable(vHint);
                       const iHint = pickImagePerImageHintForChannel(
                         modelData,
                         channel,

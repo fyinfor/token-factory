@@ -541,6 +541,8 @@
     "常见问答管理，为用户提供常见问题的答案（最多50个，前端显示最新20条）": "Gestion de la FAQ, fournissant des réponses aux questions courantes des utilisateurs (maximum 50, afficher les 20 dernières sur le front-end)",
     "常用上下文 Key（用于 context_*）": "Clés de contexte courantes (pour context_*)",
     "超过阈值时拒绝新请求": "Rejeter les nouvelles requêtes lorsque le seuil est dépassé",
+    "超分/秒": "Upscale / s",
+    "超分价格": "Prix super-résolution",
     "超级管理员": "Super Admin",
     "超级管理员未设置充值链接！": "Le super administrateur n'a pas défini le lien de recharge !",
     "撤销学员": "Retirer l'apprenant",

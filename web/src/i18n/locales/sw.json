@@ -541,6 +541,8 @@
     "常见问答管理，为用户提供常见问题的答案（最多50个，前端显示最新20条）": "Usimamizi wa FAQ, majibu kwa maswali ya kawaida (kadiri ya juu 50, kiolesura kinaonyesha 20 za hivi karibuni)",
     "常用上下文 Key（用于 context_*）": "Funguo za muktadha za kawaida (kwa context_*)",
     "超过阈值时拒绝新请求": "Kataa maombi mapya zaidi ya kizingiti",
+    "超分/秒": "Upscale / sekunde",
+    "超分价格": "Bei ya super-resolution",
     "超级管理员": "Msimamizi mkuu",
     "超级管理员未设置充值链接！": "Msimamizi mkuu hajaweka kiungo cha kuongeza salio!",
     "撤销学员": "Waondoe wanafunzi",

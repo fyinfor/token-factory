@@ -541,6 +541,8 @@
     "常见问答管理，为用户提供常见问题的答案（最多50个，前端显示最新20条）": "Pengurusan FAQ, menyediakan jawapan kepada soalan lazim pengguna (maks. 50, bahagian hadapan memaparkan 20 terkini)",
     "常用上下文 Key（用于 context_*）": "Kunci konteks biasa (untuk context_*)",
     "超过阈值时拒绝新请求": "Tolak permintaan baharu apabila ambang melebihi",
+    "超分/秒": "Upscale / saat",
+    "超分价格": "Harga super-resolusi",
     "超级管理员": "Pentadbir super",
     "超级管理员未设置充值链接！": "Pentadbir super belum menetapkan pautan tambah nilai!",
     "撤销学员": "Keluarkan pelajar",

@@ -32,6 +32,14 @@ type VideoFlatClipPricingHint struct {
 	Tiers                      []VideoFlatClipTierRow `json:"tiers,omitempty"`
 	// BillingMode：per_item 为按条成片；per_second 为按秒（如 Seedance2.0 常见 text_to_video_per_second）。
 	BillingMode string `json:"billing_mode,omitempty"`
+	// UpscaleTiers 视频超分按秒价（按目标分辨率去重），已套用成本折扣+加价折扣，未乘分组倍率。
+	UpscaleTiers []VideoUpscaleTierRow `json:"upscale_tiers,omitempty"`
+}
+
+// VideoUpscaleTierRow 超分按秒展示档：Resolution 为目标分辨率标识，UsdAfterChannelDiscount 为有效美元/秒。
+type VideoUpscaleTierRow struct {
+	Resolution              string  `json:"resolution"`
+	UsdAfterChannelDiscount float64 `json:"usd_after_channel_discount"`
 }
 
 type videoFlatTier struct {
@@ -517,20 +525,23 @@ func buildVideoFlatClipHintFromFlatPrice(
 }
 
 // BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按 token，否则按秒，否则按条），
-// 返回最低价档（含成本折扣与加价折扣）及总档位数。
+// 返回最低价档（含成本折扣与加价折扣）及总档位数；若配置了超分按秒价，一并附带 UpscaleTiers。
 func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *VideoFlatClipPricingHint {
 	channelRules, chOK := resolveChannelVideoRulesForPricingCardHint(channelID, modelName)
 	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
-	if hint := buildVideoFlatClipHintFromRules(
+	var hint *VideoFlatClipPricingHint
+	if h := buildVideoFlatClipHintFromRules(
 		channelRules, chOK, globalRules, glOK, costDiscPercent, markupDiscPercent,
-	); hint != nil {
-		return hint
+	); h != nil {
+		hint = h
+	} else {
+		channelPrice, _ := ratio_setting.GetChannelVideoPrice(channelID, modelName)
+		globalPrice, _ := ratio_setting.GetVideoPrice(modelName)
+		hint = buildVideoFlatClipHintFromFlatPrice(
+			channelPrice, globalPrice, costDiscPercent, markupDiscPercent,
+		)
 	}
-	channelPrice, _ := ratio_setting.GetChannelVideoPrice(channelID, modelName)
-	globalPrice, _ := ratio_setting.GetVideoPrice(modelName)
-	return buildVideoFlatClipHintFromFlatPrice(
-		channelPrice, globalPrice, costDiscPercent, markupDiscPercent,
-	)
+	return attachVideoUpscaleTiers(hint, buildVideoUpscaleTiers(channelID, modelName, costDiscPercent, markupDiscPercent))
 }
 
 // BuildVideoFlatClipHintForTimePricingPayload builds the card/sidebar summary
@@ -542,8 +553,9 @@ func BuildVideoFlatClipHintForTimePricingPayload(
 	costDiscPercent, markupDiscPercent float64,
 ) *VideoFlatClipPricingHint {
 	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
+	var hint *VideoFlatClipPricingHint
 	if payload.VideoPricingRules != nil && videoRulesUsableForPricingHint(*payload.VideoPricingRules) {
-		return buildVideoFlatClipHintFromRules(
+		hint = buildVideoFlatClipHintFromRules(
 			*payload.VideoPricingRules,
 			true,
 			globalRules,
@@ -551,12 +563,15 @@ func BuildVideoFlatClipHintForTimePricingPayload(
 			costDiscPercent,
 			markupDiscPercent,
 		)
+	} else if payload.VideoPrice != nil && *payload.VideoPrice > 0 {
+		globalPrice, _ := ratio_setting.GetVideoPrice(modelName)
+		hint = buildVideoFlatClipHintFromFlatPrice(
+			*payload.VideoPrice, globalPrice, costDiscPercent, markupDiscPercent,
+		)
 	}
-	if payload.VideoPrice == nil || *payload.VideoPrice <= 0 {
-		return nil
+	var upscale []VideoUpscaleTierRow
+	if payload.VideoPricingRules != nil {
+		upscale = mergeVideoUpscaleTiers(payload.VideoPricingRules.VideoUpscalePerSecond, nil, costDiscPercent, markupDiscPercent)
 	}
-	globalPrice, _ := ratio_setting.GetVideoPrice(modelName)
-	return buildVideoFlatClipHintFromFlatPrice(
-		*payload.VideoPrice, globalPrice, costDiscPercent, markupDiscPercent,
-	)
+	return attachVideoUpscaleTiers(hint, upscale)
 }
