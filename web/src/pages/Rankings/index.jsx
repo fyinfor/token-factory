@@ -31,7 +31,7 @@ const CATEGORY_TABS = [
 ];
 
 const RankingsPage = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
   const {
     period,
@@ -146,14 +146,25 @@ const RankingsPage = () => {
 
       <Spin spinning={loading && !snapshot}>
         <div className='grid lg:grid-cols-2 gap-6 mb-6'>
-          <ModelLeaderboard models={models} t={t} loading={loading} />
-          <VendorShareSection vendors={vendors} t={t} loading={loading} />
+          <ModelLeaderboard
+            models={models}
+            t={t}
+            loading={loading}
+            language={i18n.language}
+          />
+          <VendorShareSection
+            vendors={vendors}
+            t={t}
+            loading={loading}
+            language={i18n.language}
+          />
         </div>
         <PulseSection
           topMovers={snapshot?.top_movers || []}
           topDroppers={snapshot?.top_droppers || []}
           t={t}
           loading={loading}
+          language={i18n.language}
         />
       </Spin>
       </div>

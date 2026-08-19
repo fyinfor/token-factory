@@ -12,8 +12,9 @@ import {
   getRankingCategoryStyle,
 } from '../../helpers/rankings';
 import { getLobeHubIcon } from '../../helpers';
+import { getVendorLocalizedName } from '../../helpers/modelPricing';
 
-const VendorShareSection = memo(({ vendors = [], t, loading }) => (
+const VendorShareSection = memo(({ vendors = [], t, loading, language }) => (
   <Card
     className='!rounded-2xl shadow-sm h-full'
     title={
@@ -45,7 +46,12 @@ const VendorShareSection = memo(({ vendors = [], t, loading }) => (
                     <span className='w-6 h-6 flex items-center justify-center rounded-md bg-white border border-gray-100 shrink-0'>
                       {item.vendor_icon ? getLobeHubIcon(item.vendor_icon, 18) : null}
                     </span>
-                    <span className='text-sm font-medium truncate'>{item.vendor}</span>
+                    <span className='text-sm font-medium truncate'>
+                      {getVendorLocalizedName(
+                        { name: item.vendor, name_en: item.vendor_name_en },
+                        language,
+                      )}
+                    </span>
                   </div>
                   <span
                     className='text-xs font-mono shrink-0'

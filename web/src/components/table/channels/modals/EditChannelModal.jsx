@@ -68,6 +68,7 @@ import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import CodexOAuthModal from './CodexOAuthModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
+import ChannelTimePricingModal from './ChannelTimePricingModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
@@ -92,6 +93,7 @@ import {
   IconSearch,
   IconChevronDown,
   IconUpload,
+  IconCalendarClock,
 } from '@douyinfe/semi-icons';
 
 const { Text, Title } = Typography;
@@ -344,6 +346,8 @@ const EditChannelModal = (props) => {
   const [modelMappingValueSelected, setModelMappingValueSelected] =
     useState('');
   const [ollamaModalVisible, setOllamaModalVisible] = useState(false);
+  const [timePricingVisible, setTimePricingVisible] = useState(false);
+  const [savedChannelModels, setSavedChannelModels] = useState([]);
   const formApiRef = useRef(null);
   const [vertexKeys, setVertexKeys] = useState([]);
   const [vertexFileList, setVertexFileList] = useState([]);
@@ -1139,6 +1143,7 @@ const EditChannelModal = (props) => {
       } else {
         data.models = data.models.split(',');
       }
+      setSavedChannelModels([...data.models]);
       if (data.group === '') {
         data.groups = [];
       } else {
@@ -1681,6 +1686,7 @@ const EditChannelModal = (props) => {
     fetchGroups().then();
     if (!isEdit) {
       initialBaseUrlRef.current = '';
+      setSavedChannelModels([]);
       setInputs(originInputs);
       if (formApiRef.current) {
         formApiRef.current.setValues(originInputs);
@@ -1801,6 +1807,8 @@ const EditChannelModal = (props) => {
     }
     // 重置本地输入，避免下次打开残留上一次的 JSON 字段值
     setInputs(getInitValues());
+    setSavedChannelModels([]);
+    setTimePricingVisible(false);
     setLogoFileList([]);
     // 重置密钥显示状态
     resetKeyDisplayState();
@@ -3479,6 +3487,38 @@ const EditChannelModal = (props) => {
                     )}
                     style={{ width: '100%' }}
                   />
+
+                  <div
+                    className='mb-4 rounded-lg p-3'
+                    style={{
+                      backgroundColor: 'var(--semi-color-fill-0)',
+                      border: '1px solid var(--semi-color-border)',
+                    }}
+                  >
+                    <div className='flex flex-wrap items-center justify-between gap-3'>
+                      <div className='min-w-0 flex-1'>
+                        <div className='mb-1 text-sm font-medium'>
+                          {t('动态费率')}
+                        </div>
+                        <Text type='tertiary' size='small'>
+                          {isEdit
+                            ? t(
+                                '按指定模型和时段临时覆盖渠道的成本折扣率、经营成本率和加价折扣率。',
+                              )
+                            : t('请先保存渠道，再为已保存的模型配置动态费率。')}
+                        </Text>
+                      </div>
+                      <Button
+                        type='primary'
+                        theme='outline'
+                        icon={<IconCalendarClock />}
+                        disabled={!isEdit}
+                        onClick={() => setTimePricingVisible(true)}
+                      >
+                        {t('管理动态费率')}
+                      </Button>
+                    </div>
+                  </div>
 
                   {inputs.type === 1 && (
                     <>
@@ -5354,6 +5394,13 @@ const EditChannelModal = (props) => {
           onVisibleChange={(visible) => setIsModalOpenurl(visible)}
         />
       </SideSheet>
+      <ChannelTimePricingModal
+        visible={timePricingVisible}
+        channelId={channelId}
+        channelName={inputs.name}
+        models={savedChannelModels}
+        onCancel={() => setTimePricingVisible(false)}
+      />
       <StatusCodeRiskGuardModal
         visible={statusCodeRiskConfirmVisible}
         detailItems={statusCodeRiskDetailItems}
