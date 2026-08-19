@@ -56,7 +56,7 @@ const (
 	ChannelTypeReplicate         = 56
 	ChannelTypeCodex             = 57
 	ChannelTypeOpenAIVideo       = 58 // OpenAI-compatible video gateway (currently Hidream/Seedance upstream)
-	ChannelTypeVideoGenerator    = 59 // OpenAI-compatible video gateway for /videogenerator/generate
+	ChannelTypeVideoGenerator    = 59 // OpenAI-compatible video gateway for /video/generations
 	ChannelTypeTokenFactoryOpen  = 60
 	ChannelTypeTencentCloudVideo = 61 // Tencent Cloud VOD CreateAigcVideoTask / DescribeTaskDetail
 	ChannelTypeTencentCloudImage = 62 // Tencent Cloud VOD CreateAigcImageTask / DescribeTaskDetail

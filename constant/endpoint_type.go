@@ -22,7 +22,7 @@ const (
 	// against an upstream TokenFactory instance — not the external Hidream /v1/videos/generations path.
 	EndpointTypeTokenFactoryVideo EndpointType = "tokenfactory-video"
 	// EndpointTypeVideoGenerator points to providers exposing
-	// /videogenerator/generate style APIs.
+	// /video/generations style APIs (formerly /videogenerator/generate).
 	EndpointTypeVideoGenerator EndpointType = "videogenerator"
 	// EndpointTypeTencentCloudVODVideo is Tencent Cloud VOD AIGC video (TC3 API).
 	// Client body matches OpenAI-videogenerator-style gateway fields; upstream uses JSON API 3.0.

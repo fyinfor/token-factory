@@ -1040,17 +1040,14 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 			"size":     "960x540",
 		}
 	case constant.EndpointTypeVideoGenerator:
+		// 本站内部 /video/generations 走 TaskSubmitReq，prompt 必填；不能再发旧 videogenerator 的 content[]。
 		bodyMap = map[string]any{
-			"model": upstreamModel,
-			"content": []map[string]any{
-				{"type": "text", "text": "a cute cat dancing in a sunny garden"},
-			},
-			"parameters": map[string]any{
-				"duration":   5,
-				"resolution": "720P",
-				"ratio":      "16:9",
-				"watermark":  false,
-			},
+			"model":      upstreamModel,
+			"prompt":     "Mickey Mouse and Donald Duck are dancing at Disney.",
+			"duration":   4,
+			"resolution": "480p",
+			"ratio":      "16:9",
+			"images":     []string{"https://tokease.cn/logo.png"},
 		}
 	case constant.EndpointTypeAliVideo:
 		fullURL = taskalivideo.SubmitURL(baseURL)
@@ -1269,7 +1266,20 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		}
 		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
 	case constant.EndpointTypeVideoGenerator:
-		if codeRes := gjson.GetBytes(respBody, "status"); codeRes.Exists() && codeRes.Int() != 0 {
+		if errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "error.message").String()); errMsg != "" {
+			bodyErr := fmt.Errorf(
+				"upstream error: %s | request: %s | response: %s",
+				errMsg,
+				truncateForError(string(bodyBytes)),
+				truncateForError(string(respBody)),
+			)
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		if codeRes := gjson.GetBytes(respBody, "status"); codeRes.Exists() && codeRes.Type == gjson.Number && codeRes.Int() != 0 {
 			errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())
 			if errMsg == "" {
 				errMsg = fmt.Sprintf("upstream returned status=%d", codeRes.Int())
@@ -1286,7 +1296,13 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
 			}
 		}
-		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "result.task_id").String())
+		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "id").String())
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "data.task_id").String())
+		}
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "result.task_id").String())
+		}
 		if taskID == "" {
 			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
 		}

@@ -436,7 +436,7 @@ export function getChannelIcon(channelType) {
     case 1: // OpenAI
     case 57: // Codex
     case 58: // ZX-Videos
-    case 59: // OpenAI 视频 (/videogenerator/generate)
+    case 59: // OpenAI 视频 (/video/generations)
     case 64: // OpenAI 图片
     case 67: // 智象未来（图像）
       return <OpenAI size={iconSize} />;
