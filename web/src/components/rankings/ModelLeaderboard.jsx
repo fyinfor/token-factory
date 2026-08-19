@@ -12,6 +12,7 @@ import {
   getRankingGrowthColor,
 } from '../../helpers/rankings';
 import { getLobeHubIcon } from '../../helpers';
+import { getVendorLocalizedName } from '../../helpers/modelPricing';
 import CategoryBadge from './CategoryBadge';
 
 const RankBadge = ({ rank }) => {
@@ -21,7 +22,7 @@ const RankBadge = ({ rank }) => {
   return <span className='text-gray-400 font-mono text-xs'>#{rank}</span>;
 };
 
-const ModelLeaderboard = memo(({ models = [], t, loading }) => (
+const ModelLeaderboard = memo(({ models = [], t, loading, language }) => (
   <Card
     className='!rounded-2xl shadow-sm h-full'
     title={
@@ -54,7 +55,12 @@ const ModelLeaderboard = memo(({ models = [], t, loading }) => (
                   <CategoryBadge category={item.category} />
                 </div>
                 <div className='text-xs truncate' style={{ color: 'var(--semi-color-text-2)' }}>
-                  {item.vendor || t('未知供应商')}
+                  {item.vendor
+                    ? getVendorLocalizedName(
+                        { name: item.vendor, name_en: item.vendor_name_en },
+                        language,
+                      )
+                    : t('未知供应商')}
                 </div>
               </div>
               <div className='text-right shrink-0'>
