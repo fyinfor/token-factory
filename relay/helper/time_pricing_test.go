@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestModelPriceHelperPerCallUsesActiveTimePricingPlan(t *testing.T) {
+func TestModelPriceHelperPerCallIgnoresLegacyIndependentTimePricingPlan(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	previousDB := model.DB
 	db, err := gorm.Open(
@@ -48,14 +48,18 @@ func TestModelPriceHelperPerCallUsesActiveTimePricingPlan(t *testing.T) {
 	plan := &model.ChannelModelPricePlan{
 		ChannelID: channelID, ModelName: modelName, Name: "peak", Enabled: true,
 	}
-	require.NoError(t, model.CreateChannelModelPricePlan(plan, model.ChannelModelPricePlanPayload{
+	legacyPayload, err := (model.ChannelModelPricePlanPayload{
 		ModelPrice: float64PointerForHelperTest(planPrice),
-	}))
-	require.NoError(t, model.CreateChannelModelPriceSchedule(&model.ChannelModelPriceSchedule{
+	}).MarshalJSONString()
+	require.NoError(t, err)
+	plan.PricePayload = legacyPayload
+	plan.Version = 1
+	require.NoError(t, db.Create(plan).Error)
+	require.NoError(t, db.Create(&model.ChannelModelPriceSchedule{
 		ChannelID: channelID, ModelName: modelName, PricePlanID: plan.ID,
 		Name: "all day", Timezone: model.DefaultChannelModelPricingTimezone,
 		Weekdays: 0x7f, StartMinute: 0, EndMinute: 1440, Enabled: true,
-	}))
+	}).Error)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -69,15 +73,10 @@ func TestModelPriceHelperPerCallUsesActiveTimePricingPlan(t *testing.T) {
 
 	priceData, err := ModelPriceHelperPerCall(ctx, info)
 	require.NoError(t, err)
-	require.InDelta(t, planPrice, priceData.ModelPrice, 1e-9)
+	require.InDelta(t, officialPrice, priceData.ModelPrice, 1e-9)
 	require.InDelta(t, officialPrice, priceData.GlobalModelPrice, 1e-9)
-	require.Equal(t, plan.ID, priceData.TimePricingPlanID)
-	require.Equal(t, 1, priceData.TimePricingPlanVersion)
-	require.Equal(t, 0x7f, priceData.TimePricingWeekdays)
-	require.Equal(t, 0, priceData.TimePricingStartMinute)
-	require.Equal(t, 1440, priceData.TimePricingEndMinute)
-	require.Equal(t, model.DefaultChannelModelPricingTimezone, priceData.TimePricingTimezone)
-	require.NotEmpty(t, priceData.TimePricingPayload)
+	require.Zero(t, priceData.TimePricingPlanID)
+	require.Empty(t, priceData.TimePricingPayload)
 }
 
 func TestModelPriceHelperPerCallUsesActiveTimeRateWithRegularChannelPrice(t *testing.T) {
@@ -285,7 +284,7 @@ func TestModelPriceHelperPerCallUserModelPricingOverridesTimeRate(t *testing.T) 
 	require.Equal(t, int(officialPrice*0.85*common.QuotaPerUnit), priceData.Quota)
 }
 
-func TestTryModelPriceHelperImageUsesActiveTimePricingPlan(t *testing.T) {
+func TestTryModelPriceHelperImageUsesActiveTimeRate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	previousDB := model.DB
 	db, err := gorm.Open(
@@ -296,9 +295,11 @@ func TestTryModelPriceHelperImageUsesActiveTimePricingPlan(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelModelPricePlan{}, &model.ChannelModelPriceSchedule{}))
 	model.DB = db
 	model.ClearChannelModelTimePricingCache()
+	previousImageRules := ratio_setting.ImagePricingRules2JSONString()
 	t.Cleanup(func() {
 		model.DB = previousDB
 		model.ClearChannelModelTimePricingCache()
+		_ = ratio_setting.UpdateImagePricingRulesByJSONString(previousImageRules)
 	})
 
 	const (
@@ -306,15 +307,15 @@ func TestTryModelPriceHelperImageUsesActiveTimePricingPlan(t *testing.T) {
 		modelName  = "scheduled-image-model"
 		imagePrice = 0.031
 	)
+	require.NoError(t, ratio_setting.UpdateImagePricingRulesByJSONString(
+		`{"`+modelName+`":{"text_to_image_per_image":[{"resolution":"1024x1024","image_price":0.031}]}}`,
+	))
 	plan := &model.ChannelModelPricePlan{
-		ChannelID: channelID, ModelName: modelName, Name: "image peak", Enabled: true,
+		ChannelID: channelID, ModelName: modelName, Name: "image rate", Enabled: true,
 	}
 	require.NoError(t, model.CreateChannelModelPricePlan(plan, model.ChannelModelPricePlanPayload{
-		ImagePricingRules: &ratio_setting.ImagePricingRules{
-			TextToImagePerImage: []ratio_setting.ImageResolutionPerImageRule{
-				{Resolution: "1024x1024", ImagePrice: imagePrice},
-			},
-		},
+		Mode: model.ChannelModelPricePlanModeRate, PriceDiscountPercent: float64PointerForHelperTest(50),
+		OperatingCostPercent: float64PointerForHelperTest(10), MarkupDiscountRate: float64PointerForHelperTest(20),
 	}))
 	require.NoError(t, model.CreateChannelModelPriceSchedule(&model.ChannelModelPriceSchedule{
 		ChannelID: channelID, ModelName: modelName, PricePlanID: plan.ID,
@@ -341,11 +342,13 @@ func TestTryModelPriceHelperImageUsesActiveTimePricingPlan(t *testing.T) {
 	require.True(t, priceData.UsePrice)
 	require.Equal(t, plan.ID, priceData.TimePricingPlanID)
 	require.NotNil(t, info.ImageBilling)
-	require.InDelta(t, imagePrice, info.ImageBilling.UsdPerImage, 1e-9)
-	require.Equal(t, int(imagePrice*common.QuotaPerUnit), priceData.Quota)
+	require.InDelta(t, imagePrice*0.8, info.ImageBilling.UsdPerImage, 1e-9)
+	require.InDelta(t, 60, priceData.CostDiscountPercent, 1e-9)
+	require.InDelta(t, 20, priceData.MarkupDiscountPercent, 1e-9)
+	require.Equal(t, int(imagePrice*0.8*common.QuotaPerUnit), priceData.Quota)
 }
 
-func TestModelPriceHelperVideoUsesActiveTimePricingPlan(t *testing.T) {
+func TestModelPriceHelperVideoUsesActiveTimeRate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	previousDB := model.DB
 	db, err := gorm.Open(
@@ -356,9 +359,11 @@ func TestModelPriceHelperVideoUsesActiveTimePricingPlan(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelModelPricePlan{}, &model.ChannelModelPriceSchedule{}))
 	model.DB = db
 	model.ClearChannelModelTimePricingCache()
+	previousVideoRules := ratio_setting.VideoPricingRules2JSONString()
 	t.Cleanup(func() {
 		model.DB = previousDB
 		model.ClearChannelModelTimePricingCache()
+		_ = ratio_setting.UpdateVideoPricingRulesByJSONString(previousVideoRules)
 	})
 
 	const (
@@ -367,15 +372,15 @@ func TestModelPriceHelperVideoUsesActiveTimePricingPlan(t *testing.T) {
 		pricePerSecond = 0.012
 		duration       = 5
 	)
+	require.NoError(t, ratio_setting.UpdateVideoPricingRulesByJSONString(
+		`{"`+modelName+`":{"text_to_video_per_second":[{"resolution":"540p","has_audio":false,"price":0.012}]}}`,
+	))
 	plan := &model.ChannelModelPricePlan{
-		ChannelID: channelID, ModelName: modelName, Name: "video peak", Enabled: true,
+		ChannelID: channelID, ModelName: modelName, Name: "video rate", Enabled: true,
 	}
 	require.NoError(t, model.CreateChannelModelPricePlan(plan, model.ChannelModelPricePlanPayload{
-		VideoPricingRules: &ratio_setting.VideoPricingRules{
-			TextToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
-				{Resolution: "540p", HasAudio: false, Price: pricePerSecond},
-			},
-		},
+		Mode: model.ChannelModelPricePlanModeRate, PriceDiscountPercent: float64PointerForHelperTest(50),
+		OperatingCostPercent: float64PointerForHelperTest(10), MarkupDiscountRate: float64PointerForHelperTest(20),
 	}))
 	require.NoError(t, model.CreateChannelModelPriceSchedule(&model.ChannelModelPriceSchedule{
 		ChannelID: channelID, ModelName: modelName, PricePlanID: plan.ID,
@@ -401,7 +406,9 @@ func TestModelPriceHelperVideoUsesActiveTimePricingPlan(t *testing.T) {
 	require.Equal(t, plan.ID, priceData.TimePricingPlanID)
 	require.Equal(t, "per_second", priceData.VideoRuleUnit)
 	require.InDelta(t, pricePerSecond, priceData.VideoChannelRulePrice, 1e-9)
-	require.Equal(t, int(pricePerSecond*duration*common.QuotaPerUnit), priceData.Quota)
+	require.InDelta(t, 60, priceData.CostDiscountPercent, 1e-9)
+	require.InDelta(t, 20, priceData.MarkupDiscountPercent, 1e-9)
+	require.Equal(t, int(pricePerSecond*duration*0.8*common.QuotaPerUnit), priceData.Quota)
 }
 
 func float64PointerForHelperTest(value float64) *float64 { return &value }

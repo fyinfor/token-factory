@@ -6,9 +6,10 @@ import React, { memo } from 'react';
 import { Card, Empty, Spin, Tag } from '@douyinfe/semi-ui';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { formatRankingGrowth, getRankingGrowthColor } from '../../helpers/rankings';
+import { getVendorLocalizedName } from '../../helpers/modelPricing';
 import CategoryBadge from './CategoryBadge';
 
-const MoverList = ({ title, icon, items, emptyText, positive }) => (
+const MoverList = ({ title, icon, items, emptyText, positive, language }) => (
   <div>
     <div className='flex items-center gap-2 mb-3 text-sm font-semibold'>
       {icon}
@@ -30,7 +31,10 @@ const MoverList = ({ title, icon, items, emptyText, positive }) => (
                 <CategoryBadge category={item.category} />
               </div>
               <div className='text-xs truncate' style={{ color: 'var(--semi-color-text-2)' }}>
-                {item.vendor}
+                {getVendorLocalizedName(
+                  { name: item.vendor, name_en: item.vendor_name_en },
+                  language,
+                )}
               </div>
             </div>
             <div className='shrink-0 text-right'>
@@ -57,7 +61,7 @@ const MoverList = ({ title, icon, items, emptyText, positive }) => (
   </div>
 );
 
-const PulseSection = memo(({ topMovers = [], topDroppers = [], t, loading }) => (
+const PulseSection = memo(({ topMovers = [], topDroppers = [], t, loading, language }) => (
   <Card
     className='!rounded-2xl shadow-sm'
     title={t('排名变化')}
@@ -70,6 +74,7 @@ const PulseSection = memo(({ topMovers = [], topDroppers = [], t, loading }) => 
           items={topMovers}
           emptyText={t('暂无上升模型')}
           positive
+          language={language}
         />
         <MoverList
           title={t('排名下降')}
@@ -77,6 +82,7 @@ const PulseSection = memo(({ topMovers = [], topDroppers = [], t, loading }) => 
           items={topDroppers}
           emptyText={t('暂无下降模型')}
           positive={false}
+          language={language}
         />
       </div>
     </Spin>

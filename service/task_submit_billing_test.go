@@ -32,3 +32,18 @@ func TestResolveActualTaskQuotaOnSubmit_TokenFactoryOpenKeepsLocalEstimate(t *te
 
 	require.Equal(t, 2366703, actual)
 }
+
+func TestExtractTotalTokensFromTaskData_VideoGenerationsTwoFormats(t *testing.T) {
+	format1 := []byte(`{"status":"completed","usage":{"completion_tokens":40594,"total_tokens":40594}}`)
+	require.Equal(t, 40594, extractTotalTokensFromTaskData(format1))
+
+	format2 := []byte(`{
+		"code":"success",
+		"data":{
+			"task_id":"task_x",
+			"status":"SUCCESS",
+			"data":{"usage":{"completion_tokens":191254,"total_tokens":2008000}}
+		}
+	}`)
+	require.Equal(t, 191254, extractTotalTokensFromTaskData(format2))
+}

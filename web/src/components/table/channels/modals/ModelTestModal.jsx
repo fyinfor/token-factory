@@ -223,7 +223,7 @@ const ModelTestModal = ({
     },
     {
       value: 'videogenerator',
-      label: t('视频生成') + ' (/videogenerator/generate)',
+      label: t('视频生成') + ' (/video/generations)',
     },
     {
       value: 'ali-video',

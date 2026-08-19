@@ -25,6 +25,23 @@ var (
 	ErrChannelModelScheduleConflict = errors.New("pricing schedule overlaps another enabled schedule")
 )
 
+// ChannelModelScheduleConflictError carries the enabled schedule that conflicts
+// with a proposed rule, so the API can return an actionable validation message.
+type ChannelModelScheduleConflictError struct {
+	ConflictingSchedule ChannelModelPriceSchedule
+}
+
+func (e *ChannelModelScheduleConflictError) Error() string {
+	if e == nil {
+		return ErrChannelModelScheduleConflict.Error()
+	}
+	return fmt.Sprintf("%s: %s", ErrChannelModelScheduleConflict, e.ConflictingSchedule.Name)
+}
+
+func (e *ChannelModelScheduleConflictError) Unwrap() error {
+	return ErrChannelModelScheduleConflict
+}
+
 // ChannelModelPricePlanPayload is a complete, independent channel-model pricing snapshot.
 // Pointer scalar fields preserve the difference between "unset" and an explicit zero.
 type ChannelModelPricePlanPayload struct {
@@ -82,23 +99,20 @@ func (p *ChannelModelPricePlanPayload) NormalizeAndValidate() error {
 		return errors.New("price plan payload is required")
 	}
 	p.Mode = p.ResolvedMode()
-	if p.Mode == ChannelModelPricePlanModeRate {
-		if !p.HasRateOverrides() {
-			return errors.New("rate plan must contain cost discount, operating cost and markup discount")
-		}
-		for label, value := range map[string]*float64{
-			"price discount percent": p.PriceDiscountPercent,
-			"operating cost percent": p.OperatingCostPercent,
-			"markup discount rate":   p.MarkupDiscountRate,
-		} {
-			if value == nil || *value < 0 || *value > 1000 {
-				return fmt.Errorf("%s must be between 0 and 1000", label)
-			}
-		}
-		return nil
+	if p.Mode != ChannelModelPricePlanModeRate {
+		return errors.New("only dynamic rate plans are supported")
 	}
-	if !p.HasIndependentPricing() {
-		return errors.New("price plan must contain pricing")
+	if !p.HasRateOverrides() {
+		return errors.New("rate plan must contain cost discount, operating cost and markup discount")
+	}
+	for label, value := range map[string]*float64{
+		"price discount percent": p.PriceDiscountPercent,
+		"operating cost percent": p.OperatingCostPercent,
+		"markup discount rate":   p.MarkupDiscountRate,
+	} {
+		if value == nil || *value < 0 || *value > 1000 {
+			return fmt.Errorf("%s must be between 0 and 1000", label)
+		}
 	}
 	return nil
 }
@@ -229,6 +243,47 @@ type PricingTimePricingInfo struct {
 	ActivePlanName     string                       `json:"active_plan_name,omitempty"`
 	ActivePlanVersion  int                          `json:"active_plan_version,omitempty"`
 	Schedules          []PricingTimePricingSchedule `json:"schedules"`
+}
+
+// ChannelModelRateRule is the channel editor's combined view of one dynamic
+// rate plan and its schedule. The database keeps the two normalized records,
+// while the management UI treats them as one rule.
+type ChannelModelRateRule struct {
+	ScheduleID           int     `json:"schedule_id"`
+	PlanID               int     `json:"plan_id"`
+	PlanVersion          int     `json:"plan_version"`
+	ModelName            string  `json:"model_name"`
+	Name                 string  `json:"name"`
+	PriceDiscountPercent float64 `json:"price_discount_percent"`
+	OperatingCostPercent float64 `json:"operating_cost_percent"`
+	EffectiveCostPercent float64 `json:"effective_cost_percent"`
+	MarkupDiscountRate   float64 `json:"markup_discount_rate"`
+	Timezone             string  `json:"timezone"`
+	Weekdays             int     `json:"weekdays"`
+	StartMinute          int     `json:"start_minute"`
+	EndMinute            int     `json:"end_minute"`
+	EffectiveFrom        string  `json:"effective_from,omitempty"`
+	EffectiveTo          string  `json:"effective_to,omitempty"`
+	Enabled              bool    `json:"enabled"`
+	Active               bool    `json:"active"`
+}
+
+type ChannelModelRateRuleMutation struct {
+	ChannelID             int
+	SupplierApplicationID int
+	ModelNames            []string
+	Name                  string
+	PriceDiscountPercent  float64
+	OperatingCostPercent  float64
+	MarkupDiscountRate    float64
+	Timezone              string
+	Weekdays              int
+	StartMinute           int
+	EndMinute             int
+	EffectiveFrom         string
+	EffectiveTo           string
+	Enabled               bool
+	UserID                int
 }
 
 type cachedChannelModelTimePricing struct {
@@ -416,6 +471,14 @@ func schedulesOverlap(a, b ChannelModelPriceSchedule) bool {
 	return false
 }
 
+func isUsableChannelModelRatePlan(plan ChannelModelPricePlan) bool {
+	if !plan.Enabled {
+		return false
+	}
+	payload, err := ParseChannelModelPricePlanPayload(plan.PricePayload)
+	return err == nil && payload.ResolvedMode() == ChannelModelPricePlanModeRate && payload.HasRateOverrides()
+}
+
 func ValidateChannelModelScheduleConflict(tx *gorm.DB, schedule ChannelModelPriceSchedule) error {
 	if !schedule.Enabled {
 		return nil
@@ -431,9 +494,28 @@ func ValidateChannelModelScheduleConflict(tx *gorm.DB, schedule ChannelModelPric
 	if err := query.Find(&existing).Error; err != nil {
 		return err
 	}
+	planIDs := make([]int, 0, len(existing))
 	for _, item := range existing {
+		planIDs = append(planIDs, item.PricePlanID)
+	}
+	usablePlanIDs := make(map[int]struct{}, len(planIDs))
+	if len(planIDs) > 0 {
+		var plans []ChannelModelPricePlan
+		if err := tx.Where("id IN ?", planIDs).Find(&plans).Error; err != nil {
+			return err
+		}
+		for _, plan := range plans {
+			if isUsableChannelModelRatePlan(plan) {
+				usablePlanIDs[plan.ID] = struct{}{}
+			}
+		}
+	}
+	for _, item := range existing {
+		if _, ok := usablePlanIDs[item.PricePlanID]; !ok {
+			continue
+		}
 		if schedulesOverlap(schedule, item) {
-			return fmt.Errorf("%w: %s", ErrChannelModelScheduleConflict, item.Name)
+			return &ChannelModelScheduleConflictError{ConflictingSchedule: item}
 		}
 	}
 	return nil
@@ -465,7 +547,7 @@ func loadChannelModelTimePricing(channelID int, modelName string) (cachedChannel
 	}
 	for _, plan := range plans {
 		payload, err := ParseChannelModelPricePlanPayload(plan.PricePayload)
-		if err != nil {
+		if err != nil || payload.ResolvedMode() != ChannelModelPricePlanModeRate || !payload.HasRateOverrides() {
 			continue
 		}
 		cached.plans[plan.ID] = plan
@@ -627,7 +709,7 @@ func LoadChannelModelTimePricingDisplay(channelIDs []int, at time.Time) (map[str
 	payloadByID := make(map[int]ChannelModelPricePlanPayload, len(plans))
 	for _, plan := range plans {
 		payload, err := ParseChannelModelPricePlanPayload(plan.PricePayload)
-		if err != nil {
+		if err != nil || payload.ResolvedMode() != ChannelModelPricePlanModeRate || !payload.HasRateOverrides() {
 			continue
 		}
 		planByID[plan.ID] = plan
@@ -809,7 +891,7 @@ func CreateChannelModelPriceSchedule(schedule *ChannelModelPriceSchedule) error 
 		if err := tx.First(&plan, schedule.PricePlanID).Error; err != nil {
 			return err
 		}
-		if plan.ChannelID != schedule.ChannelID || plan.ModelName != schedule.ModelName || !plan.Enabled {
+		if plan.ChannelID != schedule.ChannelID || plan.ModelName != schedule.ModelName || !isUsableChannelModelRatePlan(plan) {
 			return errors.New("price plan does not belong to this channel model")
 		}
 		if err := ValidateChannelModelScheduleConflict(tx, *schedule); err != nil {
@@ -839,7 +921,7 @@ func UpdateChannelModelPriceSchedule(schedule *ChannelModelPriceSchedule) error 
 		if err := tx.First(&plan, schedule.PricePlanID).Error; err != nil {
 			return err
 		}
-		if plan.ChannelID != existing.ChannelID || plan.ModelName != existing.ModelName || !plan.Enabled {
+		if plan.ChannelID != existing.ChannelID || plan.ModelName != existing.ModelName || !isUsableChannelModelRatePlan(plan) {
 			return errors.New("price plan does not belong to this channel model")
 		}
 		schedule.ChannelID = existing.ChannelID
@@ -873,6 +955,287 @@ func DeleteChannelModelPriceSchedule(scheduleID int) error {
 	}
 	InvalidateChannelModelTimePricingCache(schedule.ChannelID, schedule.ModelName)
 	return nil
+}
+
+func ListChannelModelRateRules(channelID int) ([]ChannelModelRateRule, error) {
+	var plans []ChannelModelPricePlan
+	if err := DB.Where("channel_id = ?", channelID).Find(&plans).Error; err != nil {
+		return nil, err
+	}
+	planByID := make(map[int]ChannelModelPricePlan, len(plans))
+	payloadByID := make(map[int]ChannelModelPricePlanPayload, len(plans))
+	for _, plan := range plans {
+		payload, err := ParseChannelModelPricePlanPayload(plan.PricePayload)
+		if err != nil || payload.ResolvedMode() != ChannelModelPricePlanModeRate || !payload.HasRateOverrides() {
+			continue
+		}
+		planByID[plan.ID] = plan
+		payloadByID[plan.ID] = payload
+	}
+
+	var schedules []ChannelModelPriceSchedule
+	if err := DB.Where("channel_id = ?", channelID).
+		Order("model_name ASC, start_minute ASC, id ASC").Find(&schedules).Error; err != nil {
+		return nil, err
+	}
+	rules := make([]ChannelModelRateRule, 0, len(schedules))
+	for _, schedule := range schedules {
+		plan, ok := planByID[schedule.PricePlanID]
+		if !ok || plan.ModelName != schedule.ModelName {
+			continue
+		}
+		payload := payloadByID[plan.ID]
+		raw := *payload.PriceDiscountPercent
+		operating := *payload.OperatingCostPercent
+		rules = append(rules, ChannelModelRateRule{
+			ScheduleID: schedule.ID, PlanID: plan.ID, PlanVersion: plan.Version,
+			ModelName: schedule.ModelName, Name: schedule.Name,
+			PriceDiscountPercent: raw, OperatingCostPercent: operating,
+			EffectiveCostPercent: EffectiveCostPercent(raw, operating),
+			MarkupDiscountRate:   clampChannelMarkupDiscountRate(*payload.MarkupDiscountRate),
+			Timezone:             schedule.Timezone, Weekdays: schedule.Weekdays,
+			StartMinute: schedule.StartMinute, EndMinute: schedule.EndMinute,
+			EffectiveFrom: schedule.EffectiveFrom, EffectiveTo: schedule.EffectiveTo,
+			Enabled: plan.Enabled && schedule.Enabled,
+			Active:  plan.Enabled && scheduleMatchesAt(schedule, time.Now()),
+		})
+	}
+	return rules, nil
+}
+
+func normalizeChannelModelRateRuleMutation(mutation *ChannelModelRateRuleMutation) (ChannelModelPricePlanPayload, error) {
+	if mutation == nil {
+		return ChannelModelPricePlanPayload{}, errors.New("dynamic rate rule is required")
+	}
+	mutation.Name = strings.TrimSpace(mutation.Name)
+	if mutation.ChannelID <= 0 || mutation.Name == "" || len(mutation.ModelNames) == 0 {
+		return ChannelModelPricePlanPayload{}, errors.New("channel, models and rule name are required")
+	}
+	modelNames := make([]string, 0, len(mutation.ModelNames))
+	seen := make(map[string]struct{}, len(mutation.ModelNames))
+	for _, rawName := range mutation.ModelNames {
+		name := ratio_setting.FormatMatchingModelName(strings.TrimSpace(rawName))
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		modelNames = append(modelNames, name)
+	}
+	if len(modelNames) == 0 {
+		return ChannelModelPricePlanPayload{}, errors.New("at least one model is required")
+	}
+	mutation.ModelNames = modelNames
+	payload := ChannelModelPricePlanPayload{
+		Mode:                 ChannelModelPricePlanModeRate,
+		PriceDiscountPercent: &mutation.PriceDiscountPercent,
+		OperatingCostPercent: &mutation.OperatingCostPercent,
+		MarkupDiscountRate:   &mutation.MarkupDiscountRate,
+	}
+	if err := payload.NormalizeAndValidate(); err != nil {
+		return ChannelModelPricePlanPayload{}, err
+	}
+	return payload, nil
+}
+
+func CreateChannelModelRateRules(mutation *ChannelModelRateRuleMutation) error {
+	payload, err := normalizeChannelModelRateRuleMutation(mutation)
+	if err != nil {
+		return err
+	}
+	raw, err := payload.MarshalJSONString()
+	if err != nil {
+		return err
+	}
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		for _, modelName := range mutation.ModelNames {
+			plan := ChannelModelPricePlan{
+				ChannelID: mutation.ChannelID, SupplierApplicationID: mutation.SupplierApplicationID,
+				ModelName: modelName, Name: mutation.Name, PricePayload: raw, Version: 1,
+				Enabled: mutation.Enabled, CreatedByUserID: mutation.UserID, UpdatedByUserID: mutation.UserID,
+			}
+			if err := tx.Create(&plan).Error; err != nil {
+				return err
+			}
+			if !mutation.Enabled {
+				if err := tx.Model(&plan).Update("enabled", false).Error; err != nil {
+					return err
+				}
+			}
+			schedule := ChannelModelPriceSchedule{
+				ChannelID: mutation.ChannelID, SupplierApplicationID: mutation.SupplierApplicationID,
+				ModelName: modelName, PricePlanID: plan.ID, Name: mutation.Name,
+				Timezone: mutation.Timezone, Weekdays: mutation.Weekdays,
+				StartMinute: mutation.StartMinute, EndMinute: mutation.EndMinute,
+				EffectiveFrom: mutation.EffectiveFrom, EffectiveTo: mutation.EffectiveTo,
+				Enabled: mutation.Enabled, CreatedByUserID: mutation.UserID, UpdatedByUserID: mutation.UserID,
+			}
+			if err := ValidateChannelModelPriceSchedule(&schedule); err != nil {
+				return err
+			}
+			if err := ValidateChannelModelScheduleConflict(tx, schedule); err != nil {
+				return err
+			}
+			if err := tx.Create(&schedule).Error; err != nil {
+				return err
+			}
+			if !mutation.Enabled {
+				if err := tx.Model(&schedule).Update("enabled", false).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, modelName := range mutation.ModelNames {
+		InvalidateChannelModelTimePricingCache(mutation.ChannelID, modelName)
+	}
+	return nil
+}
+
+func UpdateChannelModelRateRule(scheduleID int, mutation *ChannelModelRateRuleMutation) error {
+	if scheduleID <= 0 {
+		return errors.New("schedule id is required")
+	}
+	if mutation != nil && len(mutation.ModelNames) > 1 {
+		return errors.New("only one model can be updated at a time")
+	}
+	payload, err := normalizeChannelModelRateRuleMutation(mutation)
+	if err != nil {
+		return err
+	}
+	raw, err := payload.MarshalJSONString()
+	if err != nil {
+		return err
+	}
+	var invalidatedModel string
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var schedule ChannelModelPriceSchedule
+		if err := tx.First(&schedule, scheduleID).Error; err != nil {
+			return err
+		}
+		if schedule.ChannelID != mutation.ChannelID || schedule.ModelName != mutation.ModelNames[0] {
+			return gorm.ErrRecordNotFound
+		}
+		var plan ChannelModelPricePlan
+		if err := tx.First(&plan, schedule.PricePlanID).Error; err != nil {
+			return err
+		}
+		oldPayload, err := ParseChannelModelPricePlanPayload(plan.PricePayload)
+		if err != nil || oldPayload.ResolvedMode() != ChannelModelPricePlanModeRate || !oldPayload.HasRateOverrides() {
+			return errors.New("only dynamic rate rules can be updated")
+		}
+		if plan.ChannelID != schedule.ChannelID || plan.ModelName != schedule.ModelName {
+			return errors.New("dynamic rate plan does not belong to this schedule")
+		}
+		schedule.Name = mutation.Name
+		schedule.Timezone = mutation.Timezone
+		schedule.Weekdays = mutation.Weekdays
+		schedule.StartMinute = mutation.StartMinute
+		schedule.EndMinute = mutation.EndMinute
+		schedule.EffectiveFrom = mutation.EffectiveFrom
+		schedule.EffectiveTo = mutation.EffectiveTo
+		schedule.Enabled = mutation.Enabled
+		schedule.UpdatedByUserID = mutation.UserID
+		if err := ValidateChannelModelPriceSchedule(&schedule); err != nil {
+			return err
+		}
+		if err := ValidateChannelModelScheduleConflict(tx, schedule); err != nil {
+			return err
+		}
+		var planScheduleCount int64
+		if err := tx.Model(&ChannelModelPriceSchedule{}).
+			Where("price_plan_id = ?", plan.ID).Count(&planScheduleCount).Error; err != nil {
+			return err
+		}
+		if planScheduleCount > 1 {
+			detachedPlan := ChannelModelPricePlan{
+				ChannelID: schedule.ChannelID, SupplierApplicationID: schedule.SupplierApplicationID,
+				ModelName: schedule.ModelName, Name: mutation.Name, PricePayload: raw,
+				Version: plan.Version + 1, Enabled: mutation.Enabled,
+				CreatedByUserID: mutation.UserID, UpdatedByUserID: mutation.UserID,
+			}
+			if err := tx.Create(&detachedPlan).Error; err != nil {
+				return err
+			}
+			if !mutation.Enabled {
+				if err := tx.Model(&detachedPlan).Update("enabled", false).Error; err != nil {
+					return err
+				}
+			}
+			schedule.PricePlanID = detachedPlan.ID
+		}
+		if err := tx.Model(&schedule).Updates(map[string]interface{}{
+			"price_plan_id": schedule.PricePlanID,
+			"name":          schedule.Name, "timezone": schedule.Timezone, "weekdays": schedule.Weekdays,
+			"start_minute": schedule.StartMinute, "end_minute": schedule.EndMinute,
+			"effective_from": schedule.EffectiveFrom, "effective_to": schedule.EffectiveTo,
+			"enabled": schedule.Enabled, "updated_by_user_id": schedule.UpdatedByUserID,
+		}).Error; err != nil {
+			return err
+		}
+		if planScheduleCount == 1 {
+			if err := tx.Model(&plan).Updates(map[string]interface{}{
+				"name": mutation.Name, "price_payload": raw, "enabled": mutation.Enabled,
+				"updated_by_user_id": mutation.UserID, "version": plan.Version + 1,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		invalidatedModel = schedule.ModelName
+		return nil
+	})
+	if err == nil {
+		InvalidateChannelModelTimePricingCache(mutation.ChannelID, invalidatedModel)
+	}
+	return err
+}
+
+func DeleteChannelModelRateRule(channelID, scheduleID int) error {
+	var invalidatedModel string
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var schedule ChannelModelPriceSchedule
+		if err := tx.First(&schedule, scheduleID).Error; err != nil {
+			return err
+		}
+		if schedule.ChannelID != channelID {
+			return gorm.ErrRecordNotFound
+		}
+		var plan ChannelModelPricePlan
+		if err := tx.First(&plan, schedule.PricePlanID).Error; err != nil {
+			return err
+		}
+		payload, err := ParseChannelModelPricePlanPayload(plan.PricePayload)
+		if err != nil || payload.ResolvedMode() != ChannelModelPricePlanModeRate || !payload.HasRateOverrides() {
+			return errors.New("only dynamic rate rules can be deleted")
+		}
+		if plan.ChannelID != schedule.ChannelID || plan.ModelName != schedule.ModelName {
+			return errors.New("dynamic rate plan does not belong to this schedule")
+		}
+		if err := tx.Delete(&schedule).Error; err != nil {
+			return err
+		}
+		var count int64
+		if err := tx.Model(&ChannelModelPriceSchedule{}).Where("price_plan_id = ?", plan.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			if err := tx.Delete(&plan).Error; err != nil {
+				return err
+			}
+		}
+		invalidatedModel = schedule.ModelName
+		return nil
+	})
+	if err == nil {
+		InvalidateChannelModelTimePricingCache(channelID, invalidatedModel)
+	}
+	return err
 }
 
 func SortChannelModelSchedulesForDisplay(schedules []ChannelModelPriceSchedule) {
