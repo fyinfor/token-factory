@@ -116,3 +116,10 @@ export function hasVideoFlatClipTierTable(hint) {
   if (Number.isFinite(n) && n > 0) return true;
   return Array.isArray(hint.tiers) && hint.tiers.length > 0;
 }
+
+export function hasVideoUpscaleTierTable(hint) {
+  if (!hint || !Array.isArray(hint.upscale_tiers)) return false;
+  return hint.upscale_tiers.some(
+    (row) => Number(row?.usd_after_channel_discount) > 0,
+  );
+}

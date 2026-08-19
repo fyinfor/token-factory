@@ -34,6 +34,7 @@ import {
 } from '../constants/videoFlatClipLaneI18n';
 import { calculatePriceDiscountPercent } from '../utils/discount';
 import TierPriceMatrix from './TierPriceMatrix';
+import VideoUpscaleHintTable from './VideoUpscaleHintTable';
 
 const { Text } = Typography;
 
@@ -125,7 +126,9 @@ function VideoFlatClipHintTable({
     [hint?.tiers],
   );
 
-  if (!hint || groups.length === 0) return null;
+  const showUpscaleTable = !isCostPrice;
+
+  if (!hint) return null;
 
   const billingMode = String(hint.billing_mode || '');
   const unitLabel =
@@ -167,6 +170,19 @@ function VideoFlatClipHintTable({
             align: 'right',
           },
         ];
+
+  if (groups.length === 0) {
+    if (!showUpscaleTable) return null;
+    return (
+      <VideoUpscaleHintTable
+        hint={hint}
+        usedGroupRatio={usedGroupRatio}
+        displayPrice={displayPrice}
+        t={t}
+        blurPricing={blurPricing}
+      />
+    );
+  }
 
   return (
     <div className='video-price-section mt-1 flex flex-col gap-2 pt-2'>
@@ -229,6 +245,15 @@ function VideoFlatClipHintTable({
           );
         })}
       </div>
+      {showUpscaleTable ? (
+        <VideoUpscaleHintTable
+          hint={hint}
+          usedGroupRatio={usedGroupRatio}
+          displayPrice={displayPrice}
+          t={t}
+          blurPricing={blurPricing}
+        />
+      ) : null}
     </div>
   );
 }

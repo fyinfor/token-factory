@@ -605,6 +605,8 @@
     "常见问答管理，为用户提供常见问题的答案（最多50个，前端显示最新20条）": "FAQ management, providing answers to common questions for users (maximum 50, display latest 20 on the front end)",
     "常用上下文 Key（用于 context_*）": "Common Context Keys (for context_*)",
     "超过阈值时拒绝新请求": "Reject new requests when threshold is exceeded",
+    "超分/秒": "Upscale / sec",
+    "超分价格": "Super-resolution pricing",
     "超级管理员": "Super Admin",
     "超级管理员未设置充值链接！": "Super administrator has not set the recharge link!",
     "撤销学员": "Withdraw Learner",
