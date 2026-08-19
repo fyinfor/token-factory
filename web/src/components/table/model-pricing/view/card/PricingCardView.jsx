@@ -87,6 +87,7 @@ import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n'
 import {
   IMAGE_PER_IMAGE_LANE_I18N_KEY,
   laneToImagePerImageFamily,
+  hasImagePerImageTierTable,
 } from '../../constants/imagePerImageHintI18n';
 import { isTopHotModel } from '../../utils/modelHeat';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
@@ -1688,7 +1689,13 @@ const PricingCardView = ({
 
     const modelHasVideoFlatPrice = hasNumericValue(model.video_price);
     const modelHasASRPrice = isASRPricingModel(model);
-    const hideTextTokenPrices = isVideoPricingModel(model) || modelHasASRPrice;
+    const modelHasImagePerImagePrice = hasImagePerImageTierTable(
+      model.image_per_image_hint,
+    );
+    const hideTextTokenPrices =
+      isVideoPricingModel(model) ||
+      modelHasASRPrice ||
+      modelHasImagePerImagePrice;
 
     // 提取所有通道的价格（与 relay 一致：ch.model_ratio 已含渠道折扣；再乘分组倍率）
     const prices = {
@@ -2151,9 +2158,14 @@ const PricingCardView = ({
       });
     } else {
       const isTierBilling = quotaType === 3;
-      const skipFlatInput = isTierBilling || !!tokenTierInfo?.hasModelTier;
+      const skipFlatInput =
+        isTierBilling ||
+        !!tokenTierInfo?.hasModelTier ||
+        useTieredImagePerImage;
       const skipFlatOutput =
-        isTierBilling || !!tokenTierInfo?.hasCompletionTier;
+        isTierBilling ||
+        !!tokenTierInfo?.hasCompletionTier ||
+        useTieredImagePerImage;
 
       const flatTableRows = [];
       if (input && !skipFlatInput) {

@@ -800,7 +800,11 @@ const ModelChannelList = ({
         ? Number(modelData.create_cache_ratio)
         : 0;
     const hideTextTokenPrices =
-      isVideoPricingModel(modelData) || isASRPricingModel(modelData);
+      isVideoPricingModel(modelData) ||
+      isASRPricingModel(modelData) ||
+      hasImagePerImageTierTable(
+        pickImagePerImageHintForChannel(modelData, channel),
+      );
 
     // 计算价格，返回 { display, value }
     const calculatePrice = (
@@ -1059,7 +1063,9 @@ const ModelChannelList = ({
     const iHint = pickImagePerImageHintForChannel(modelData, channel);
     const showImagePerImageTable = hasImagePerImageTierTable(iHint);
     const hideTextTokenPrices =
-      isVideoPricingModel(modelData) || isASRPricingModel(modelData);
+      isVideoPricingModel(modelData) ||
+      isASRPricingModel(modelData) ||
+      showImagePerImageTable;
 
     const costItems = computeChannelCostRates({
       channelId: channel.channel_id,
@@ -1290,7 +1296,7 @@ const ModelChannelList = ({
               blurPricing={blurPricing}
             />
           ) : null}
-          {isTierBilling ? (
+          {isTierBilling && !showImagePerImageTable ? (
             <TokenTierDetailTable
               model={modelData}
               channel={channel}
@@ -1735,7 +1741,7 @@ const ModelChannelList = ({
                                   blurPricing={blurPricing}
                                 />
                               ) : null}
-                              {isTierBilling ? (
+                              {isTierBilling && !showImagePerImageTable ? (
                                 <TokenTierDetailTable
                                   model={modelData}
                                   channel={channel}
