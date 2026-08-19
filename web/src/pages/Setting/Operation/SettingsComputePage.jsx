@@ -21,6 +21,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Button,
   Card,
+  Input,
   Space,
   Spin,
   Switch,
@@ -39,7 +40,11 @@ const EMPTY_CONFIG = {
   enabled: false,
   allow_javascript: false,
   allow_popups: false,
+  content_url: '',
+  redirect_to_url: false,
   has_html: false,
+  has_url: false,
+  has_content: false,
   file_name: '',
   updated_at: 0,
 };
@@ -55,6 +60,7 @@ export default function SettingsComputePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [contentURL, setContentURL] = useState('');
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -65,7 +71,9 @@ export default function SettingsComputePage() {
         showError(message || t('加载算力页面配置失败'));
         return;
       }
-      setConfig({ ...EMPTY_CONFIG, ...data });
+      const nextConfig = { ...EMPTY_CONFIG, ...data };
+      setConfig(nextConfig);
+      setContentURL(nextConfig.content_url);
     } catch (error) {
       showError(error?.response?.data?.message || t('加载算力页面配置失败'));
     } finally {
@@ -138,6 +146,50 @@ export default function SettingsComputePage() {
     }
   };
 
+  const updateContentURL = async () => {
+    setSaving(true);
+    try {
+      const res = await API.put('/api/compute-page/admin/url', {
+        content_url: contentURL,
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('保存失败，请重试'));
+        return;
+      }
+      const nextConfig = { ...EMPTY_CONFIG, ...data };
+      setConfig(nextConfig);
+      setContentURL(nextConfig.content_url);
+      window.dispatchEvent(new Event(COMPUTE_PAGE_STATUS_CHANGED_EVENT));
+      showSuccess(t('保存成功'));
+    } catch (error) {
+      showError(error?.response?.data?.message || t('保存失败，请重试'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateRedirectToURL = async (redirectToURL) => {
+    setSaving(true);
+    try {
+      const res = await API.put('/api/compute-page/admin/redirect', {
+        redirect_to_url: redirectToURL,
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('保存失败，请重试'));
+        return;
+      }
+      setConfig({ ...EMPTY_CONFIG, ...data });
+      window.dispatchEvent(new Event(COMPUTE_PAGE_STATUS_CHANGED_EVENT));
+      showSuccess(t('保存成功'));
+    } catch (error) {
+      showError(error?.response?.data?.message || t('保存失败，请重试'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const uploadHTML = async ({ file, onSuccess, onError, onProgress }) => {
     const fileInstance = file?.fileInstance || file;
     if (!isHTMLFile(fileInstance)) {
@@ -201,12 +253,69 @@ export default function SettingsComputePage() {
               <Text>{config.enabled ? t('已开启') : t('已关闭')}</Text>
               <Switch
                 checked={config.enabled}
-                disabled={loading || saving || !config.has_html}
+                disabled={loading || saving || !config.has_content}
                 loading={saving}
                 checkedText='｜'
                 uncheckedText='〇'
                 onChange={updateEnabled}
               />
+            </div>
+          </div>
+
+          <div className='rounded-md border border-solid border-semi-color-border bg-semi-color-fill-0 p-4'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                <Text strong>{t('网页地址')}</Text>
+                <Text type='tertiary' size='small'>
+                  {t(
+                    '填写 HTTP 或 HTTPS 网址后优先显示该网站；清空后将使用已上传的 HTML 文件',
+                  )}
+                </Text>
+              </div>
+              <div className='flex w-full shrink-0 gap-2 sm:w-[440px]'>
+                <Input
+                  value={contentURL}
+                  placeholder='https://example.com'
+                  showClear
+                  disabled={loading || saving || uploading}
+                  onChange={setContentURL}
+                  onEnterPress={updateContentURL}
+                />
+                <Button
+                  theme='solid'
+                  loading={saving}
+                  disabled={loading || saving || uploading}
+                  onClick={updateContentURL}
+                >
+                  {t('保存网址')}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className='rounded-md border border-solid border-semi-color-border bg-semi-color-fill-0 p-4'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='flex min-w-0 flex-col gap-1'>
+                <Text strong>{t('点击算力入口跳转网址')}</Text>
+                <Text type='tertiary' size='small'>
+                  {t(
+                    '开启后，点击顶部算力入口会在当前页面直接跳转到填写的网址',
+                  )}
+                </Text>
+              </div>
+              <div className='flex shrink-0 items-center gap-3'>
+                <Text>
+                  {config.redirect_to_url ? t('已开启') : t('已关闭')}
+                </Text>
+                <Switch
+                  checked={config.redirect_to_url}
+                  disabled={loading || saving || !config.has_url}
+                  loading={saving}
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={updateRedirectToURL}
+                />
+              </div>
             </div>
           </div>
 
@@ -239,7 +348,7 @@ export default function SettingsComputePage() {
                     {config.has_html ? t('替换 HTML') : t('上传 HTML')}
                   </Button>
                 </Upload>
-                {config.has_html ? (
+                {config.has_content ? (
                   <Button
                     icon={<ExternalLink size={16} />}
                     disabled={!config.enabled}
@@ -304,8 +413,10 @@ export default function SettingsComputePage() {
             </div>
           </div>
 
-          {!config.has_html ? (
-            <Text type='warning'>{t('上传 HTML 文件后才能开启算力页面')}</Text>
+          {!config.has_content ? (
+            <Text type='warning'>
+              {t('填写网址或上传 HTML 文件后才能开启算力页面')}
+            </Text>
           ) : null}
         </div>
       </Spin>

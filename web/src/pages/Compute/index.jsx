@@ -25,7 +25,7 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 
-const COMPUTE_PAGE_SANDBOX = 'allow-same-origin';
+const COMPUTE_PAGE_SANDBOX = 'allow-same-origin allow-forms';
 
 function getComputePageSandbox(allowJavaScript, allowPopups) {
   const permissions = [COMPUTE_PAGE_SANDBOX];
@@ -41,6 +41,7 @@ export default function ComputePage() {
   const [state, setState] = useState('loading');
   const [allowJavaScript, setAllowJavaScript] = useState(false);
   const [allowPopups, setAllowPopups] = useState(false);
+  const [contentURL, setContentURL] = useState('');
   const iframeRef = useRef(null);
   const resizeObserverRef = useRef(null);
   const copyCleanupRef = useRef(null);
@@ -118,6 +119,7 @@ export default function ComputePage() {
         if (cancelled) return;
         setAllowJavaScript(Boolean(payload?.data?.allow_javascript));
         setAllowPopups(Boolean(payload?.data?.allow_popups));
+        setContentURL(payload?.data?.content_url || '');
         setState(
           payload?.success && payload?.data?.enabled ? 'enabled' : 'disabled',
         );
@@ -165,7 +167,7 @@ export default function ComputePage() {
     <iframe
       ref={iframeRef}
       className='compute-page-frame'
-      src='/api/compute-page/content'
+      src={contentURL || '/api/compute-page/content'}
       title={t('算力')}
       sandbox={getComputePageSandbox(allowJavaScript, allowPopups)}
       onLoad={handleIframeLoad}

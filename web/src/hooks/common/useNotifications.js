@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getLocalizedAnnouncement } from '../../helpers/announcement';
 
 const ANNOUNCEMENT_READ_STORAGE_KEY = 'notice_read_keys';
 const ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY = 'notice_popup_acknowledged_keys';
@@ -43,7 +45,7 @@ const hashString = (value) => {
 };
 
 export const getAnnouncementKey = (announcement) =>
-  `${announcement?.publishDate || ''}-${(announcement?.content || '').slice(0, 30)}`;
+  `${announcement?.publishDate || ''}-${(announcement?.sourceContent || announcement?.content || '').slice(0, 30)}`;
 
 const readStoredKeys = () => {
   return readStoredList(ANNOUNCEMENT_READ_STORAGE_KEY);
@@ -55,8 +57,8 @@ export const getAnnouncementPopupKey = (announcement) =>
       id: announcement?.id ?? null,
       publishDate: announcement?.publishDate || '',
       type: announcement?.type || 'default',
-      content: announcement?.content || '',
-      extra: announcement?.extra || '',
+      content: announcement?.sourceContent || announcement?.content || '',
+      extra: announcement?.sourceExtra || announcement?.extra || '',
     }),
   )}`;
 
@@ -94,10 +96,14 @@ export const markAnnouncementKeysRead = (keys) => {
 };
 
 export const useNotifications = (statusState) => {
+  const { i18n } = useTranslation();
   const [readVersion, setReadVersion] = useState(0);
   const announcements = useMemo(
-    () => statusState?.status?.announcements || [],
-    [statusState?.status?.announcements],
+    () =>
+      (statusState?.status?.announcements || []).map((announcement) =>
+        getLocalizedAnnouncement(announcement, i18n.language),
+      ),
+    [i18n.language, statusState?.status?.announcements],
   );
 
   const unreadKeys = useMemo(() => {

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Space,
@@ -26,7 +26,9 @@ import {
   Typography,
   Empty,
   Divider,
+  Input,
   Modal,
+  Select,
   Tag,
   Switch,
   TextArea,
@@ -36,17 +38,127 @@ import {
   IllustrationNoResult,
   IllustrationNoResultDark,
 } from '@douyinfe/semi-illustrations';
-import { Plus, Edit, Trash2, Save, Bell, Maximize2 } from 'lucide-react';
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+  Bell,
+  Maximize2,
+  Languages,
+  Square,
+} from 'lucide-react';
 import {
   API,
+  getUserIdFromLocalStorage,
   showError,
   showSuccess,
   getRelativeTime,
   formatDateTimeString,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import {
+  readAssistantContent,
+  readAssistantStreamChunk,
+  stripOuterMarkdownFence,
+  stripReasoningContent,
+} from '../../../components/table/models/modals/documentAiUtils';
 
 const { Text } = Typography;
+
+const normalizeTranslation = (content) =>
+  stripOuterMarkdownFence(stripReasoningContent(content));
+
+const isTextModel = (item) => {
+  const tags = String(item?.tags || '')
+    .replaceAll('，', ',')
+    .replaceAll('、', ',')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  return tags.length === 0 || tags.includes('文本');
+};
+
+const streamAnnouncementTranslation = async ({
+  payload,
+  signal,
+  onProgress,
+}) => {
+  const response = await fetch(
+    API.getUri({ url: '/api/models/document_ai/generate' }),
+    {
+      method: 'POST',
+      credentials: 'include',
+      signal,
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+        'New-API-User': String(getUserIdFromLocalStorage()),
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    const rawError = await response.text();
+    try {
+      const parsed = JSON.parse(rawError);
+      throw new Error(
+        parsed?.error?.message || parsed?.message || response.statusText,
+      );
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error(rawError || response.statusText);
+      }
+      throw error;
+    }
+  }
+  if (
+    !String(response.headers.get('content-type')).includes('text/event-stream')
+  ) {
+    return readAssistantContent({ data: await response.json() });
+  }
+  if (!response.body) {
+    throw new Error('Streaming response body is unavailable');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let streamed = '';
+  const consumeEvent = (event) => {
+    const data = event
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n')
+      .trim();
+    if (!data || data === '[DONE]') return;
+    let parsed;
+    try {
+      parsed = JSON.parse(data);
+    } catch (_) {
+      return;
+    }
+    if (parsed?.error) {
+      throw new Error(parsed.error.message || 'AI stream failed');
+    }
+    const delta = readAssistantStreamChunk(parsed);
+    if (!delta) return;
+    streamed += delta;
+    onProgress?.(streamed);
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop() || '';
+    events.forEach(consumeEvent);
+    if (done) break;
+  }
+  if (buffer.trim()) consumeEvent(buffer);
+  return normalizeTranslation(streamed);
+};
 
 const SettingsAnnouncements = ({ options, refresh }) => {
   const { t } = useTranslation();
@@ -62,10 +174,16 @@ const SettingsAnnouncements = ({ options, refresh }) => {
   const [hasChanges, setHasChanges] = useState(false);
   const [announcementForm, setAnnouncementForm] = useState({
     content: '',
+    content_en: '',
     publishDate: new Date(),
     type: 'default',
     extra: '',
+    extra_en: '',
   });
+  const [announcementLanguage, setAnnouncementLanguage] = useState('zh');
+  const [textModels, setTextModels] = useState([]);
+  const [selectedTextModel, setSelectedTextModel] = useState('');
+  const [translationLoading, setTranslationLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
@@ -73,7 +191,16 @@ const SettingsAnnouncements = ({ options, refresh }) => {
   // 面板启用状态
   const [panelEnabled, setPanelEnabled] = useState(true);
 
-  const formApiRef = useRef(null);
+  const translationAbortControllerRef = useRef(null);
+
+  const textModelOptions = useMemo(
+    () =>
+      textModels.map((item) => ({
+        label: item.model_name,
+        value: item.model_name,
+      })),
+    [textModels],
+  );
 
   const typeOptions = [
     { value: 'default', label: t('默认') },
@@ -229,10 +356,13 @@ const SettingsAnnouncements = ({ options, refresh }) => {
     setEditingAnnouncement(null);
     setAnnouncementForm({
       content: '',
+      content_en: '',
       publishDate: new Date(),
       type: 'default',
       extra: '',
+      extra_en: '',
     });
+    setAnnouncementLanguage('zh');
     setShowAnnouncementModal(true);
   };
 
@@ -240,12 +370,15 @@ const SettingsAnnouncements = ({ options, refresh }) => {
     setEditingAnnouncement(announcement);
     setAnnouncementForm({
       content: announcement.content,
+      content_en: announcement.content_en || '',
       publishDate: announcement.publishDate
         ? new Date(announcement.publishDate)
         : new Date(),
       type: announcement.type || 'default',
       extra: announcement.extra || '',
+      extra_en: announcement.extra_en || '',
     });
+    setAnnouncementLanguage('zh');
     setShowAnnouncementModal(true);
   };
 
@@ -310,6 +443,102 @@ const SettingsAnnouncements = ({ options, refresh }) => {
     } finally {
       setModalLoading(false);
     }
+  };
+
+  const loadTextModels = async () => {
+    try {
+      const res = await API.get('/api/user/models?scene=playground');
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || t('加载模型信息失败'));
+      }
+      const raw = res.data?.data;
+      const available = (Array.isArray(raw) ? raw : raw?.items || [])
+        .map((item) =>
+          typeof item === 'string' ? { model_name: item, tags: '' } : item,
+        )
+        .filter((item) => item?.model_name && isTextModel(item));
+      setTextModels(available);
+      setSelectedTextModel((current) =>
+        available.some((item) => item.model_name === current)
+          ? current
+          : available[0]?.model_name || '',
+      );
+    } catch (error) {
+      setTextModels([]);
+      setSelectedTextModel('');
+      showError(error.message || t('加载模型信息失败'));
+    }
+  };
+
+  useEffect(() => {
+    if (showAnnouncementModal) {
+      loadTextModels();
+      return;
+    }
+    translationAbortControllerRef.current?.abort();
+    translationAbortControllerRef.current = null;
+    setTranslationLoading(false);
+  }, [showAnnouncementModal]);
+
+  const runAnnouncementTranslation = async () => {
+    const source = announcementForm.content.trim();
+    if (!source) {
+      showError(t('请先填写公告内容'));
+      return;
+    }
+    if (!selectedTextModel) {
+      showError(t('暂无可用文本模型'));
+      return;
+    }
+
+    const original = announcementForm.content_en;
+    const controller = new AbortController();
+    translationAbortControllerRef.current = controller;
+    setTranslationLoading(true);
+    setAnnouncementLanguage('en');
+    try {
+      const result = await streamAnnouncementTranslation({
+        signal: controller.signal,
+        payload: {
+          model: selectedTextModel,
+          section: 'announcement',
+          action: 'translate',
+          document: source,
+        },
+        onProgress: (streamed) =>
+          setAnnouncementForm((current) => ({
+            ...current,
+            content_en: normalizeTranslation(streamed),
+          })),
+      });
+      if (!result) {
+        throw new Error(t('文本模型未返回有效内容'));
+      }
+      setAnnouncementForm((current) => ({
+        ...current,
+        content_en: result,
+      }));
+      showSuccess(t('公告中译英完成'));
+    } catch (error) {
+      setAnnouncementForm((current) => ({
+        ...current,
+        content_en: original,
+      }));
+      if (error.name === 'AbortError') {
+        showSuccess(t('已停止翻译，已恢复原文'));
+      } else {
+        showError(error.message || t('AI 处理失败'));
+      }
+    } finally {
+      if (translationAbortControllerRef.current === controller) {
+        translationAbortControllerRef.current = null;
+      }
+      setTranslationLoading(false);
+    }
+  };
+
+  const stopAnnouncementTranslation = () => {
+    translationAbortControllerRef.current?.abort();
   };
 
   const parseAnnouncements = (announcementsStr) => {
@@ -521,7 +750,10 @@ const SettingsAnnouncements = ({ options, refresh }) => {
         title={editingAnnouncement ? t('编辑公告') : t('添加公告')}
         visible={showAnnouncementModal}
         onOk={handleSaveAnnouncement}
-        onCancel={() => setShowAnnouncementModal(false)}
+        onCancel={() => {
+          translationAbortControllerRef.current?.abort();
+          setShowAnnouncementModal(false);
+        }}
         okText={t('保存')}
         cancelText={t('取消')}
         confirmLoading={modalLoading}
@@ -530,19 +762,92 @@ const SettingsAnnouncements = ({ options, refresh }) => {
           layout='vertical'
           initValues={announcementForm}
           key={editingAnnouncement ? editingAnnouncement.id : 'new'}
-          getFormApi={(api) => (formApiRef.current = api)}
         >
-          <Form.TextArea
-            field='content'
-            label={t('公告内容')}
-            placeholder={t('请输入公告内容（支持 Markdown/HTML）')}
-            maxCount={500}
-            rows={3}
-            rules={[{ required: true, message: t('请输入公告内容') }]}
-            onChange={(value) =>
-              setAnnouncementForm({ ...announcementForm, content: value })
+          <Form.Slot label={t('公告语言')}>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Button
+                type={announcementLanguage === 'zh' ? 'primary' : 'tertiary'}
+                theme={announcementLanguage === 'zh' ? 'solid' : 'light'}
+                disabled={translationLoading || modalLoading}
+                onClick={() => setAnnouncementLanguage('zh')}
+              >
+                {t('中文公告')}
+              </Button>
+              <Button
+                type={announcementLanguage === 'en' ? 'primary' : 'tertiary'}
+                theme={announcementLanguage === 'en' ? 'solid' : 'light'}
+                disabled={translationLoading || modalLoading}
+                onClick={() => setAnnouncementLanguage('en')}
+              >
+                {t('英文公告')}
+              </Button>
+            </div>
+          </Form.Slot>
+          <Form.Slot label={t('AI 翻译')}>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Select
+                filter
+                style={{ minWidth: 220, flex: '1 1 220px' }}
+                value={selectedTextModel || undefined}
+                placeholder={t('选择用于处理文档的文本模型')}
+                emptyContent={t('暂无可用文本模型')}
+                optionList={textModelOptions}
+                disabled={translationLoading || modalLoading}
+                onChange={setSelectedTextModel}
+              />
+              <Button
+                type='tertiary'
+                icon={<Languages size={16} />}
+                loading={translationLoading}
+                disabled={
+                  !selectedTextModel || translationLoading || modalLoading
+                }
+                onClick={runAnnouncementTranslation}
+              >
+                {t('中译英')}
+              </Button>
+              {translationLoading ? (
+                <Button
+                  type='danger'
+                  theme='light'
+                  icon={<Square size={14} fill='currentColor' />}
+                  onClick={stopAnnouncementTranslation}
+                >
+                  {t('停止翻译')}
+                </Button>
+              ) : null}
+            </div>
+          </Form.Slot>
+          <Form.Slot
+            label={
+              announcementLanguage === 'en' ? t('公告英文内容') : t('公告内容')
             }
-          />
+          >
+            <TextArea
+              key={`announcement-content-${announcementLanguage}`}
+              value={
+                announcementLanguage === 'en'
+                  ? announcementForm.content_en
+                  : announcementForm.content
+              }
+              placeholder={
+                announcementLanguage === 'en'
+                  ? t('请输入公告英文内容（支持 Markdown/HTML）')
+                  : t('请输入公告内容（支持 Markdown/HTML）')
+              }
+              maxCount={1500}
+              rows={8}
+              style={{ width: '100%' }}
+              disabled={translationLoading || modalLoading}
+              onChange={(value) =>
+                setAnnouncementForm((current) => ({
+                  ...current,
+                  [announcementLanguage === 'en' ? 'content_en' : 'content']:
+                    value,
+                }))
+              }
+            />
+          </Form.Slot>
           <Button
             theme='light'
             type='tertiary'
@@ -550,6 +855,7 @@ const SettingsAnnouncements = ({ options, refresh }) => {
             icon={<Maximize2 size={14} />}
             style={{ marginBottom: 16 }}
             onClick={() => setShowContentModal(true)}
+            disabled={translationLoading || modalLoading}
           >
             {t('放大编辑')}
           </Button>
@@ -570,14 +876,28 @@ const SettingsAnnouncements = ({ options, refresh }) => {
               setAnnouncementForm({ ...announcementForm, type: value })
             }
           />
-          <Form.Input
-            field='extra'
-            label={t('说明信息')}
-            placeholder={t('可选，公告的补充说明')}
-            onChange={(value) =>
-              setAnnouncementForm({ ...announcementForm, extra: value })
-            }
-          />
+          <Form.Slot label={t('说明信息')}>
+            <Input
+              key={`announcement-extra-${announcementLanguage}`}
+              placeholder={
+                announcementLanguage === 'en'
+                  ? t('可选，公告的英文补充说明')
+                  : t('可选，公告的补充说明')
+              }
+              value={
+                announcementLanguage === 'en'
+                  ? announcementForm.extra_en
+                  : announcementForm.extra
+              }
+              disabled={translationLoading || modalLoading}
+              onChange={(value) =>
+                setAnnouncementForm((current) => ({
+                  ...current,
+                  [announcementLanguage === 'en' ? 'extra_en' : 'extra']: value,
+                }))
+              }
+            />
+          </Form.Slot>
         </Form>
       </Modal>
 
@@ -602,28 +922,38 @@ const SettingsAnnouncements = ({ options, refresh }) => {
 
       {/* 公告内容放大编辑 Modal */}
       <Modal
-        title={t('编辑公告内容')}
+        title={
+          announcementLanguage === 'en'
+            ? t('编辑公告英文内容')
+            : t('编辑公告内容')
+        }
         visible={showContentModal}
-        onOk={() => {
-          // 将内容同步到表单
-          if (formApiRef.current) {
-            formApiRef.current.setValue('content', announcementForm.content);
-          }
-          setShowContentModal(false);
-        }}
+        onOk={() => setShowContentModal(false)}
         onCancel={() => setShowContentModal(false)}
         okText={t('确定')}
         cancelText={t('取消')}
         width={800}
       >
         <TextArea
-          value={announcementForm.content}
-          placeholder={t('请输入公告内容（支持 Markdown/HTML）')}
-          maxCount={500}
+          value={
+            announcementLanguage === 'en'
+              ? announcementForm.content_en
+              : announcementForm.content
+          }
+          placeholder={
+            announcementLanguage === 'en'
+              ? t('请输入公告英文内容（支持 Markdown/HTML）')
+              : t('请输入公告内容（支持 Markdown/HTML）')
+          }
+          maxCount={1500}
           rows={15}
           style={{ width: '100%' }}
+          disabled={translationLoading || modalLoading}
           onChange={(value) =>
-            setAnnouncementForm({ ...announcementForm, content: value })
+            setAnnouncementForm((current) => ({
+              ...current,
+              [announcementLanguage === 'en' ? 'content_en' : 'content']: value,
+            }))
           }
         />
       </Modal>

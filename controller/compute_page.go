@@ -27,12 +27,24 @@ type computePagePopupsRequest struct {
 	AllowPopups bool `json:"allow_popups"`
 }
 
+type computePageURLRequest struct {
+	ContentURL string `json:"content_url"`
+}
+
+type computePageRedirectRequest struct {
+	RedirectToURL bool `json:"redirect_to_url"`
+}
+
 func computePageResponse(config service.ComputePageConfig) gin.H {
 	return gin.H{
-		"enabled":          config.Enabled && config.HasHTML,
+		"enabled":          config.Enabled && config.HasContent,
 		"allow_javascript": config.AllowJavaScript,
 		"allow_popups":     config.AllowPopups,
+		"content_url":      config.ContentURL,
+		"redirect_to_url":  config.RedirectToURL,
 		"has_html":         config.HasHTML,
+		"has_url":          config.HasURL,
+		"has_content":      config.HasContent,
 		"file_name":        config.FileName,
 		"updated_at":       config.UpdatedAt,
 	}
@@ -49,9 +61,11 @@ func GetComputePageStatus(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"enabled":          config.Enabled && config.HasHTML,
+			"enabled":          config.Enabled && config.HasContent,
 			"allow_javascript": config.AllowJavaScript,
 			"allow_popups":     config.AllowPopups,
+			"content_url":      config.ContentURL,
+			"redirect_to_url":  config.RedirectToURL,
 		},
 	})
 }
@@ -73,7 +87,7 @@ func GetComputePageContent(c *gin.Context) {
 }
 
 func computePageContentSecurityPolicy(allowJavaScript bool, allowPopups bool) string {
-	sandbox := "sandbox allow-same-origin"
+	sandbox := "sandbox allow-same-origin allow-forms"
 	scriptPolicy := ""
 	if allowPopups {
 		sandbox += " allow-popups allow-popups-to-escape-sandbox"
@@ -82,7 +96,7 @@ func computePageContentSecurityPolicy(allowJavaScript bool, allowPopups bool) st
 		sandbox += " allow-scripts"
 		scriptPolicy = "; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; connect-src https: http: ws: wss:"
 	}
-	return sandbox + "; default-src 'none'" + scriptPolicy + "; style-src 'unsafe-inline' https:; img-src data: blob: https: http:; font-src data: https:; media-src data: blob: https: http:; frame-src https: http:; base-uri 'none'; form-action 'none'"
+	return sandbox + "; default-src 'none'" + scriptPolicy + "; style-src 'unsafe-inline' https:; img-src data: blob: https: http:; font-src data: https:; media-src data: blob: https: http:; frame-src https: http:; base-uri 'none'; form-action 'self' https: http:"
 }
 
 func AdminGetComputePageConfig(c *gin.Context) {
@@ -129,6 +143,34 @@ func AdminUpdateComputePagePopups(c *gin.Context) {
 		return
 	}
 	config, err := service.UpdateComputePagePopupsAllowed(request.AllowPopups)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": computePageResponse(config)})
+}
+
+func AdminUpdateComputePageURL(c *gin.Context) {
+	var request computePageURLRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	config, err := service.UpdateComputePageURL(request.ContentURL)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": computePageResponse(config)})
+}
+
+func AdminUpdateComputePageRedirect(c *gin.Context) {
+	var request computePageRedirectRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	config, err := service.UpdateComputePageRedirectToURL(request.RedirectToURL)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

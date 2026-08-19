@@ -18,8 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import './dashboard-glass.css';
 import { getRelativeTime, userIsDistributorUser } from '../../helpers';
+import { getLocalizedAnnouncement } from '../../helpers/announcement';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
@@ -58,6 +60,7 @@ const Dashboard = () => {
   // ========== Context ==========
   const [userState, userDispatch] = useContext(UserContext);
   const [statusState, statusDispatch] = useContext(StatusContext);
+  const { i18n } = useTranslation();
 
   // ========== 主要数据管理 ==========
   const dashboardData = useDashboardData(userState, userDispatch, statusState);
@@ -113,6 +116,7 @@ const Dashboard = () => {
   const apiInfoData = statusState?.status?.api_info || [];
   const announcementData = (statusState?.status?.announcements || []).map(
     (item) => {
+      const localizedItem = getLocalizedAnnouncement(item, i18n.language);
       const pubDate = item?.publishDate ? new Date(item.publishDate) : null;
       const absoluteTime =
         pubDate && !isNaN(pubDate.getTime())
@@ -120,7 +124,7 @@ const Dashboard = () => {
           : item?.publishDate || '';
       const relativeTime = getRelativeTime(item.publishDate);
       return {
-        ...item,
+        ...localizedItem,
         time: absoluteTime,
         relative: relativeTime,
       };
