@@ -9,7 +9,9 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 )
@@ -34,7 +36,9 @@ const (
 	chFieldModels         = "models"
 	chFieldGroups         = "groups"
 	chFieldModelRedirect  = "modelRedirect"
-	chFieldOtherInfo      = "otherInfo"
+	chFieldOtherInfo          = "otherInfo"
+	chFieldDynamicRates       = "dynamicRates"
+	chFieldVideoUpscaleRules  = "videoUpscaleRules"
 )
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
@@ -44,7 +48,7 @@ var chAllowedExportFields = map[string]bool{
 	chFieldSupplierName: true, chFieldType: true, chFieldLogo: true,
 	chFieldProviderType: true, chFieldApiKey: true, chFieldApiBaseUrl: true,
 	chFieldModels: true, chFieldGroups: true, chFieldModelRedirect: true,
-	chFieldOtherInfo: true,
+	chFieldOtherInfo: true, chFieldDynamicRates: true, chFieldVideoUpscaleRules: true,
 }
 
 // ─── DTO 定义 ──────────────────────────────────────────────────────────────────
@@ -128,11 +132,18 @@ func ExportChannels(c *gin.Context) {
 
 	items := make([]map[string]interface{}, 0, len(channels))
 	for _, ch := range channels {
+		var item map[string]interface{}
+		var err error
 		if isSiteBuilder {
-			items = append(items, buildSiteBuilderExportItem(c, ch, fieldSet))
+			item, err = buildSiteBuilderExportItem(c, ch, fieldSet)
 		} else {
-			items = append(items, buildChannelExportItem(ch, fieldSet))
+			item, err = buildChannelExportItem(ch, fieldSet)
 		}
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		items = append(items, item)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -146,7 +157,7 @@ func ExportChannels(c *gin.Context) {
 }
 
 // buildChannelExportItem 根据字段集合构建单个渠道的导出 map（未选字段不出现在结果中）。
-func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[string]interface{} {
+func buildChannelExportItem(ch *model.Channel, fields map[string]bool) (map[string]interface{}, error) {
 	item := make(map[string]interface{})
 
 	if fields[chFieldName] {
@@ -217,8 +228,59 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 			item[chFieldOtherInfo] = otherInfo
 		}
 	}
+	if fields[chFieldDynamicRates] {
+		rules, err := buildChannelDynamicRatesExport(ch.Id)
+		if err != nil {
+			return nil, err
+		}
+		item[chFieldDynamicRates] = rules
+	}
+	if fields[chFieldVideoUpscaleRules] {
+		item[chFieldVideoUpscaleRules] = buildChannelVideoUpscaleRulesExport(ch)
+	}
 
-	return item
+	return item, nil
+}
+
+func buildChannelVideoUpscaleRulesExport(ch *model.Channel) []map[string]interface{} {
+	if ch == nil {
+		return []map[string]interface{}{}
+	}
+	rules := ch.GetOtherSettings().VideoUpscaleRules
+	items := make([]map[string]interface{}, 0, len(rules))
+	for _, rule := range rules {
+		items = append(items, map[string]interface{}{
+			"source_resolution": rule.SourceResolution,
+			"target_resolution": rule.TargetResolution,
+			"template_id":       rule.TemplateId,
+		})
+	}
+	return items
+}
+
+func buildChannelDynamicRatesExport(channelID int) ([]map[string]interface{}, error) {
+	rules, err := model.ListChannelModelRateRules(channelID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]map[string]interface{}, 0, len(rules))
+	for _, rule := range rules {
+		items = append(items, map[string]interface{}{
+			"model_name":             rule.ModelName,
+			"name":                   rule.Name,
+			"price_discount_percent": rule.PriceDiscountPercent,
+			"operating_cost_percent": rule.OperatingCostPercent,
+			"markup_discount_rate":   rule.MarkupDiscountRate,
+			"timezone":               rule.Timezone,
+			"weekdays":               rule.Weekdays,
+			"start_minute":           rule.StartMinute,
+			"end_minute":             rule.EndMinute,
+			"effective_from":         rule.EffectiveFrom,
+			"effective_to":           rule.EffectiveTo,
+			"enabled":                rule.Enabled,
+		})
+	}
+	return items, nil
 }
 
 // buildSiteBuilderExportItem 构建建站用户导出项。
@@ -226,8 +288,11 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 // apiBaseUrl 为本平台 ServerAddress，otherInfo 中标记来源和路由信息。
 // 折扣：导出给建站用户的成本折扣 = 本平台成本折扣 + 经营成本；
 // 经营成本与加价折扣置 0，避免下游再叠一层重复计费。
-func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[string]bool) map[string]interface{} {
-	item := buildChannelExportItem(ch, fields)
+func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[string]bool) (map[string]interface{}, error) {
+	item, err := buildChannelExportItem(ch, fields)
+	if err != nil {
+		return nil, err
+	}
 
 	applySiteBuilderDiscountExport(item, ch, fields)
 
@@ -280,7 +345,7 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 	item[chFieldOtherInfo] = otherInfo
 	fields[chFieldOtherInfo] = true
 
-	return item
+	return item, nil
 }
 
 // applySiteBuilderDiscountExport 建站导出折扣改写：
@@ -324,6 +389,7 @@ func ImportChannels(c *gin.Context) {
 	}
 
 	result := &ChannelImportResult{Failures: []ChannelImportFailure{}}
+	importUserID := c.GetInt("id")
 
 	for _, item := range req.Channels {
 		// 校验 name 字段
@@ -358,6 +424,16 @@ func ImportChannels(c *gin.Context) {
 				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "更新失败: " + err.Error()})
 				continue
 			}
+			if err := chImportDynamicRatesIfPresent(existing.Id, item, importUserID); err != nil {
+				result.Failed++
+				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "导入动态费率失败: " + err.Error()})
+				continue
+			}
+			if err := chImportVideoUpscaleRulesIfPresent(existing.Id, item); err != nil {
+				result.Failed++
+				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "导入视频超分规则失败: " + err.Error()})
+				continue
+			}
 			result.Updated++
 		} else {
 			// 不存在同名渠道：新增
@@ -370,6 +446,16 @@ func ImportChannels(c *gin.Context) {
 			if err := newCh.Insert(); err != nil {
 				result.Failed++
 				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "创建渠道失败: " + err.Error()})
+				continue
+			}
+			if err := chImportDynamicRatesIfPresent(newCh.Id, item, importUserID); err != nil {
+				result.Failed++
+				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "导入动态费率失败: " + err.Error()})
+				continue
+			}
+			if err := chImportVideoUpscaleRulesIfPresent(newCh.Id, item); err != nil {
+				result.Failed++
+				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "导入视频超分规则失败: " + err.Error()})
 				continue
 			}
 			result.Added++
@@ -601,6 +687,16 @@ func chValidateItem(item map[string]interface{}) error {
 	if v, ok := item["otherInfo"]; ok && v != nil {
 		if _, ok := v.(map[string]interface{}); !ok {
 			return fmt.Errorf("otherInfo 字段必须为对象")
+		}
+	}
+	if v, ok := item[chFieldDynamicRates]; ok && v != nil {
+		if _, err := chNormalizeDynamicRatesArray(v); err != nil {
+			return err
+		}
+	}
+	if raw, ok := chGetVideoUpscaleRulesRaw(item); ok && raw != nil {
+		if _, err := chNormalizeVideoUpscaleRulesArray(raw); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -918,4 +1014,205 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}, siteBuilderApi
 	}
 
 	return nil
+}
+
+func chNormalizeDynamicRatesArray(raw interface{}) ([]map[string]interface{}, error) {
+	switch val := raw.(type) {
+	case nil:
+		return nil, nil
+	case []map[string]interface{}:
+		return val, nil
+	case []interface{}:
+		out := make([]map[string]interface{}, 0, len(val))
+		for idx, entry := range val {
+			ruleMap, ok := entry.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("dynamicRates[%d] 必须为对象", idx)
+			}
+			out = append(out, ruleMap)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("dynamicRates 字段必须为数组")
+	}
+}
+
+func chImportDynamicRatesIfPresent(channelID int, item map[string]interface{}, userID int) error {
+	raw, ok := item[chFieldDynamicRates]
+	if !ok {
+		return nil
+	}
+	arr, err := chNormalizeDynamicRatesArray(raw)
+	if err != nil {
+		return err
+	}
+
+	channel, err := model.GetChannelById(channelID, true)
+	if err != nil {
+		return fmt.Errorf("读取渠道失败: %w", err)
+	}
+	if channel == nil {
+		return fmt.Errorf("渠道不存在")
+	}
+
+	if err := model.DeleteAllChannelModelRateRules(channelID); err != nil {
+		return fmt.Errorf("清理旧动态费率失败: %w", err)
+	}
+	if len(arr) == 0 {
+		return nil
+	}
+
+	for idx, ruleMap := range arr {
+		mutation, err := chDynamicRateMutationFromImport(channel, ruleMap, userID)
+		if err != nil {
+			return fmt.Errorf("dynamicRates[%d]: %w", idx, err)
+		}
+		if err := model.CreateChannelModelRateRules(mutation); err != nil {
+			return fmt.Errorf("dynamicRates[%d]: %w", idx, err)
+		}
+	}
+	return nil
+}
+
+func chDynamicRateMutationFromImport(channel *model.Channel, rule map[string]interface{}, userID int) (*model.ChannelModelRateRuleMutation, error) {
+	modelName := strings.TrimSpace(chDynamicRateStr(rule, "model_name", "modelName"))
+	if modelName == "" {
+		return nil, fmt.Errorf("缺少 model_name")
+	}
+	name := strings.TrimSpace(chDynamicRateStr(rule, "name"))
+	if name == "" {
+		return nil, fmt.Errorf("缺少 name")
+	}
+	enabled := true
+	if v, ok := rule["enabled"]; ok {
+		if b, isBool := v.(bool); isBool {
+			enabled = b
+		}
+	}
+	mutation := &model.ChannelModelRateRuleMutation{
+		ChannelID:             channel.Id,
+		SupplierApplicationID: channel.SupplierApplicationID,
+		ModelNames:            []string{modelName},
+		Name:                  name,
+		PriceDiscountPercent:  chDynamicRateFloat(rule, "price_discount_percent", "priceDiscountPercent"),
+		OperatingCostPercent:  chDynamicRateFloat(rule, "operating_cost_percent", "operatingCostPercent"),
+		MarkupDiscountRate:    chDynamicRateFloat(rule, "markup_discount_rate", "markupDiscountRate"),
+		Timezone:              chDynamicRateStr(rule, "timezone"),
+		Weekdays:              int(chDynamicRateFloat(rule, "weekdays")),
+		StartMinute:           int(chDynamicRateFloat(rule, "start_minute", "startMinute")),
+		EndMinute:             int(chDynamicRateFloat(rule, "end_minute", "endMinute")),
+		EffectiveFrom:         chDynamicRateStr(rule, "effective_from", "effectiveFrom"),
+		EffectiveTo:           chDynamicRateStr(rule, "effective_to", "effectiveTo"),
+		Enabled:               enabled,
+		UserID:                userID,
+	}
+	if mutation.Timezone == "" {
+		mutation.Timezone = model.DefaultChannelModelPricingTimezone
+	}
+	payload := model.ChannelModelPricePlanPayload{
+		Mode:                 model.ChannelModelPricePlanModeRate,
+		PriceDiscountPercent: &mutation.PriceDiscountPercent,
+		OperatingCostPercent: &mutation.OperatingCostPercent,
+		MarkupDiscountRate:   &mutation.MarkupDiscountRate,
+	}
+	if err := payload.NormalizeAndValidate(); err != nil {
+		return nil, err
+	}
+	return mutation, nil
+}
+
+func chDynamicRateStr(rule map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if v, ok := rule[key]; ok {
+			if s, ok := v.(string); ok {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
+}
+
+func chDynamicRateFloat(rule map[string]interface{}, keys ...string) float64 {
+	for _, key := range keys {
+		if v, ok := rule[key]; ok {
+			return chToFloat64(v)
+		}
+	}
+	return 0
+}
+
+func chGetVideoUpscaleRulesRaw(item map[string]interface{}) (interface{}, bool) {
+	if v, ok := item[chFieldVideoUpscaleRules]; ok {
+		return v, true
+	}
+	if v, ok := item["video_upscale_rules"]; ok {
+		return v, true
+	}
+	return nil, false
+}
+
+func chNormalizeVideoUpscaleRulesArray(raw interface{}) ([]map[string]interface{}, error) {
+	switch val := raw.(type) {
+	case nil:
+		return nil, nil
+	case []map[string]interface{}:
+		return val, nil
+	case []interface{}:
+		out := make([]map[string]interface{}, 0, len(val))
+		for idx, entry := range val {
+			ruleMap, ok := entry.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("videoUpscaleRules[%d] 必须为对象", idx)
+			}
+			out = append(out, ruleMap)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("videoUpscaleRules 字段必须为数组")
+	}
+}
+
+func chImportVideoUpscaleRulesIfPresent(channelID int, item map[string]interface{}) error {
+	raw, ok := chGetVideoUpscaleRulesRaw(item)
+	if !ok {
+		return nil
+	}
+	arr, err := chNormalizeVideoUpscaleRulesArray(raw)
+	if err != nil {
+		return err
+	}
+
+	channel, err := model.GetChannelById(channelID, false)
+	if err != nil {
+		return fmt.Errorf("读取渠道失败: %w", err)
+	}
+	if channel == nil {
+		return fmt.Errorf("渠道不存在")
+	}
+
+	otherSettings := channel.GetOtherSettings()
+	if len(arr) == 0 {
+		otherSettings.VideoUpscaleRules = nil
+	} else {
+		rules := make([]dto.ChannelVideoUpscaleRule, 0, len(arr))
+		for idx, ruleMap := range arr {
+			source := chDynamicRateStr(ruleMap, "source_resolution", "sourceResolution")
+			target := chDynamicRateStr(ruleMap, "target_resolution", "targetResolution")
+			templateID := uint64(chDynamicRateFloat(ruleMap, "template_id", "templateId"))
+			if source == "" || target == "" || templateID == 0 {
+				return fmt.Errorf("videoUpscaleRules[%d]: 缺少 source_resolution、target_resolution 或 template_id", idx)
+			}
+			rules = append(rules, dto.ChannelVideoUpscaleRule{
+				SourceResolution: source,
+				TargetResolution: target,
+				TemplateId:       templateID,
+			})
+		}
+		otherSettings.VideoUpscaleRules = service.SanitizeChannelVideoUpscaleRules(rules)
+	}
+
+	channel.SetOtherSettings(otherSettings)
+	return model.PartialUpdateChannelFields(channelID, []string{"settings"}, &model.Channel{
+		OtherSettings: channel.OtherSettings,
+	})
 }

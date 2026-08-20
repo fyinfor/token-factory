@@ -1238,6 +1238,23 @@ func DeleteChannelModelRateRule(channelID, scheduleID int) error {
 	return err
 }
 
+// DeleteAllChannelModelRateRules removes every dynamic rate rule under a channel.
+func DeleteAllChannelModelRateRules(channelID int) error {
+	if channelID <= 0 {
+		return nil
+	}
+	rules, err := ListChannelModelRateRules(channelID)
+	if err != nil {
+		return err
+	}
+	for _, rule := range rules {
+		if err := DeleteChannelModelRateRule(channelID, rule.ScheduleID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func SortChannelModelSchedulesForDisplay(schedules []ChannelModelPriceSchedule) {
 	sort.SliceStable(schedules, func(i, j int) bool {
 		if schedules[i].StartMinute != schedules[j].StartMinute {
