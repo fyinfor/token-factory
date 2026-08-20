@@ -173,12 +173,22 @@ func validateAnnouncements(announcementsStr string) error {
 				}
 			}
 		}
-		if utf8.RuneCountInString(content) > 500 {
-			return fmt.Errorf("第%d个公告的内容长度不能超过500字符", i+1)
+		if utf8.RuneCountInString(content) > 1500 {
+			return fmt.Errorf("第%d个公告的内容长度不能超过1500字符", i+1)
+		}
+		if contentEn, exists := ann["content_en"]; exists {
+			if contentEnStr, ok := contentEn.(string); !ok || utf8.RuneCountInString(contentEnStr) > 1500 {
+				return fmt.Errorf("第%d个公告的英文内容长度不能超过1500字符", i+1)
+			}
 		}
 		if extra, exists := ann["extra"]; exists {
 			if extraStr, ok := extra.(string); ok && len(extraStr) > 200 {
 				return fmt.Errorf("第%d个公告的说明长度不能超过200字符", i+1)
+			}
+		}
+		if extraEn, exists := ann["extra_en"]; exists {
+			if extraEnStr, ok := extraEn.(string); !ok || utf8.RuneCountInString(extraEnStr) > 200 {
+				return fmt.Errorf("第%d个公告的英文说明长度不能超过200字符", i+1)
 			}
 		}
 	}

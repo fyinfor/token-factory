@@ -64,6 +64,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isDemoSiteMode,
     changelogEnabled,
     computePageEnabled,
+    computePageRedirectURL,
     isConsoleRoute,
     theme,
     headerNavModules,
@@ -301,6 +302,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     docsNav,
     headerNavModules,
     computePageEnabled,
+    computePageRedirectURL,
   );
 
   return (

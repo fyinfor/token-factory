@@ -39,6 +39,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [computePageEnabled, setComputePageEnabled] = useState(false);
+  const [computePageRedirectURL, setComputePageRedirectURL] = useState('');
   const navigate = useNavigate();
   const [currentLang, setCurrentLang] = useState(
     normalizeLanguage(i18n.language),
@@ -72,12 +73,19 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
         if (!response.ok) throw new Error('Failed to load compute page status');
         const payload = await response.json();
         if (!cancelled) {
-          setComputePageEnabled(
-            payload?.success && payload?.data?.enabled === true,
+          const enabled = payload?.success && payload?.data?.enabled === true;
+          setComputePageEnabled(enabled);
+          setComputePageRedirectURL(
+            enabled && payload?.data?.redirect_to_url
+              ? payload?.data?.content_url || ''
+              : '',
           );
         }
       } catch {
-        if (!cancelled) setComputePageEnabled(false);
+        if (!cancelled) {
+          setComputePageEnabled(false);
+          setComputePageRedirectURL('');
+        }
       }
     };
     loadComputePageStatus();
@@ -288,6 +296,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isDemoSiteMode,
     changelogEnabled,
     computePageEnabled,
+    computePageRedirectURL,
     isConsoleRoute,
     theme,
     drawerOpen,

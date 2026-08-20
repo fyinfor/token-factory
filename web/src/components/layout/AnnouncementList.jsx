@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import {
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react';
 import { getRelativeTime } from '../../helpers/utils';
 import { getAnnouncementKey } from '../../hooks/common/useNotifications';
+import { getLocalizedAnnouncement } from '../../helpers/announcement';
 
 const TYPE_META = {
   success: { icon: CheckCircle2, className: 'is-success' },
@@ -57,6 +59,7 @@ const formatTime = (publishDate) => {
 };
 
 const AnnouncementList = ({ items, unreadKeys = [], fallbackContent = '' }) => {
+  const { i18n } = useTranslation();
   const unreadSet = useMemo(() => new Set(unreadKeys), [unreadKeys]);
   const fallbackHtml = useMemo(
     () => renderMarkdown(fallbackContent),
@@ -82,11 +85,14 @@ const AnnouncementList = ({ items, unreadKeys = [], fallbackContent = '' }) => {
   }
 
   return items.map((item) => {
-    const key = getAnnouncementKey(item);
-    const meta = TYPE_META[item?.type] || TYPE_META.default;
+    const localizedItem = getLocalizedAnnouncement(item, i18n.language);
+    const key = getAnnouncementKey(localizedItem);
+    const meta = TYPE_META[localizedItem?.type] || TYPE_META.default;
     const Icon = meta.icon;
-    const contentHtml = renderMarkdown(item?.content);
-    const extraHtml = item?.extra ? renderMarkdown(item.extra) : '';
+    const contentHtml = renderMarkdown(localizedItem?.content);
+    const extraHtml = localizedItem?.extra
+      ? renderMarkdown(localizedItem.extra)
+      : '';
     return (
       <article
         className={`notification-announcement-item ${meta.className}`}
@@ -100,7 +106,7 @@ const AnnouncementList = ({ items, unreadKeys = [], fallbackContent = '' }) => {
         </div>
         <div className='notification-announcement-copy'>
           <div className='notification-announcement-meta'>
-            <time>{formatTime(item?.publishDate)}</time>
+            <time>{formatTime(localizedItem?.publishDate)}</time>
             {unreadSet.has(key) ? (
               <span className='notification-unread-dot' aria-hidden='true' />
             ) : null}

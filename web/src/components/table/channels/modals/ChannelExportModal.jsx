@@ -55,13 +55,15 @@ const ALL_EXPORT_FIELDS = [
   { key: 'models',        label: '模型' },
   { key: 'groups',        label: '分组' },
   { key: 'modelRedirect', label: '模型重定向' },
+  { key: 'dynamicRates',    label: '动态费率' },
+  { key: 'videoUpscaleRules', label: '视频超分规则' },
 ];
 
 /** 标准模式默认勾选的字段 */
 const DEFAULT_SELECTED_FIELDS = [
   'name', 'syncKey', 'discountRate', 'operatingCostRate', 'markupDiscountRate', 'quota', 'disabled',
   'type', 'logo', 'providerType', 'apiKey', 'apiBaseUrl',
-  'models', 'groups', 'modelRedirect',
+  'models', 'groups', 'modelRedirect', 'dynamicRates', 'videoUpscaleRules',
 ];
 
 /** 建站用户模式默认勾选的字段（type、apiKey、apiBaseUrl 由后端强制覆盖，但前端也勾选以保持一致）
