@@ -112,7 +112,8 @@ func relayASRAsyncSubmit(c *gin.Context, waitForResult bool) {
 }
 
 // RelayASRTaskFetch GET /v1/audio/transcriptions/async/:task_id
-// 查询异步转写任务结果。该路由不经过渠道分发（无请求体模型名），任务归属按登录用户校验。
+// 查询异步转写任务结果。无请求体模型名，不在分发阶段做模型白名单拦截；
+// 查到任务后按令牌模型限制列表校验，管理员可跨用户查询。
 func RelayASRTaskFetch(c *gin.Context) {
 	requestId := c.GetString(common.RequestIdKey)
 	var tokenFactoryError *types.TokenFactoryError

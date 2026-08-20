@@ -37,15 +37,25 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetInt("id")
-	task, exists, err := model.GetByTaskId(userID, taskID)
-	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
-		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
-		return
-	}
-	if !exists || task == nil {
-		videoProxyError(c, http.StatusNotFound, "invalid_request_error", "Task not found")
+	task, loadErr := service.LoadTaskForAsyncFetch(c, taskID)
+	if loadErr != nil {
+		status := loadErr.StatusCode
+		if status == 0 {
+			status = http.StatusBadRequest
+		}
+		message := loadErr.Message
+		errType := "invalid_request_error"
+		if loadErr.Code == "task_not_exist" {
+			status = http.StatusNotFound
+			message = "Task not found"
+		} else if status == http.StatusForbidden {
+			errType = "access_denied"
+		} else if status >= http.StatusInternalServerError {
+			errType = "server_error"
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, loadErr.Message))
+			message = "Failed to query task"
+		}
+		videoProxyError(c, status, errType, message)
 		return
 	}
 

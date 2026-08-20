@@ -314,13 +314,11 @@ func waitForASRTask(ctx context.Context, task *model.AsrTask, opts asrWaitOption
 // FetchASRTaskResult 查询异步转写任务结果（GET /v1/audio/transcriptions/async/{task_id}）。
 // 终态直接读库；未完成时再查一次上游（与后台轮询互补）。
 func FetchASRTaskResult(c *gin.Context, taskID string) *types.TokenFactoryError {
-	userID := common.GetContextKeyInt(c, constant.ContextKeyUserId)
-	task, err := model.GetAsrTaskByTaskID(taskID, userID)
-	if err != nil {
-		return types.NewErrorWithStatusCode(
-			fmt.Errorf("任务不存在: %s", taskID),
-			types.ErrorCodeInvalidRequest, http.StatusNotFound, types.ErrOptionWithSkipRetry())
+	task, loadErr := service.LoadAsrTaskForAsyncFetch(c, taskID)
+	if loadErr != nil {
+		return loadErr
 	}
+	ownerUserID := service.FetchOwnerUserID(c)
 
 	switch task.Status {
 	case dto.ASRTaskStatusSucceeded:
@@ -335,7 +333,7 @@ func FetchASRTaskResult(c *gin.Context, taskID string) *types.TokenFactoryError 
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("asr fetch poll task %s: %v", task.TaskID, err))
 	}
 	// 重新读库，避免并发后台轮询已推进状态
-	if refreshed, err := model.GetAsrTaskByTaskID(taskID, userID); err == nil {
+	if refreshed, err := model.GetAsrTaskByTaskID(taskID, ownerUserID); err == nil {
 		task = refreshed
 	}
 	writeASRFetchResponse(c, task, task.FailReason)
