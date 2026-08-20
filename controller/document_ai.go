@@ -74,6 +74,13 @@ Requirements:
 - Output only the complete translated Markdown without reasoning or an outer code fence.
 - Preserve all factual content, model names, identifiers, links, Markdown structure, limitations, and source references.
 - Do not add, remove, correct, or speculate about model capabilities, pricing, dates, benchmarks, or technical limits.`
+
+	defaultAnnouncementTranslatePrompt = `Translate the supplied Chinese system announcement into clear, publishable English.
+
+Requirements:
+- Output only the translated announcement. Do not include reasoning, notes, or an outer code fence.
+- Preserve all factual content, dates, URLs, identifiers, Markdown and HTML structure exactly.
+- Do not add, remove, correct, or speculate about any information.`
 )
 
 type documentAIPromptPayload struct {
@@ -183,6 +190,9 @@ func PrepareDocumentAIRequest(c *gin.Context) {
 	}
 	validAction := (payload.Section == "api_docs" && (payload.Action == "polish" || payload.Action == "translate")) ||
 		(payload.Section == "introduction" && (payload.Action == "generate" || payload.Action == "polish" || payload.Action == "translate"))
+	if payload.Section == "announcement" && payload.Action == "translate" {
+		validAction = true
+	}
 	if !validAction {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "message": "不支持的文档处理方式"})
 		return
@@ -216,6 +226,10 @@ func PrepareDocumentAIRequest(c *gin.Context) {
 			temperature = 0.1
 			userPrompt = "Translate the following API documentation into English according to the system requirements.\n\nTarget model: {{model}}\n\n--- Source document begins ---\n\n" + payload.Document + "\n\n--- Source document ends ---"
 		}
+	} else if payload.Section == "announcement" {
+		systemPrompt = defaultAnnouncementTranslatePrompt
+		temperature = 0.1
+		userPrompt = "Translate the following system announcement into English.\n\n--- Source begins ---\n\n" + payload.Document + "\n\n--- Source ends ---"
 	} else if payload.Action == "polish" {
 		systemPrompt = defaultIntroductionPolishPrompt
 		userPrompt = "请润色下面的模型介绍。\n\n目标模型：" + payload.TargetModel + "\n\n--- 原文开始 ---\n\n" + payload.Document + "\n\n--- 原文结束 ---"

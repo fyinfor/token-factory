@@ -24,6 +24,7 @@ export const useNavigation = (
   docsNav,
   headerNavModules,
   computePageEnabled = false,
+  computePageRedirectURL = '',
 ) => {
   const mainNavLinks = useMemo(() => {
     // 默认配置，如果没有传入配置则显示所有模块
@@ -50,7 +51,13 @@ export const useNavigation = (
             {
               text: t('算力'),
               itemKey: 'compute',
-              to: '/compute',
+              ...(computePageRedirectURL
+                ? {
+                    isExternal: true,
+                    externalLink: computePageRedirectURL,
+                    openInNewTab: false,
+                  }
+                : { to: '/compute' }),
             },
           ]
         : []),
@@ -104,7 +111,13 @@ export const useNavigation = (
       }
       return !!moduleConfig;
     });
-  }, [t, docsNav, headerNavModules, computePageEnabled]);
+  }, [
+    t,
+    docsNav,
+    headerNavModules,
+    computePageEnabled,
+    computePageRedirectURL,
+  ]);
 
   return {
     mainNavLinks,
