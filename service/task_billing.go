@@ -1317,10 +1317,7 @@ func audioLabel(hasAudio bool) string {
 
 // taskModelName 从 BillingContext 或 Properties 中获取模型名称。
 func taskModelName(task *model.Task) string {
-	if bc := task.PrivateData.BillingContext; bc != nil && bc.OriginModelName != "" {
-		return bc.OriginModelName
-	}
-	return task.Properties.OriginModelName
+	return task.GetOriginModelName()
 }
 
 func taskUseTimeSeconds(task *model.Task) int {

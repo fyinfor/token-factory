@@ -67,3 +67,17 @@ func TestDistributorModelLimitDisabledAllowsAnyModel(t *testing.T) {
 		t.Fatal("expected model limit to be disabled when whitelist is empty")
 	}
 }
+
+func TestShouldDeferTokenModelLimitCheckForAsyncFetch(t *testing.T) {
+	t.Parallel()
+
+	if !shouldDeferTokenModelLimitCheck(false, "") {
+		t.Fatal("GET async fetch with empty model must defer token model limit check")
+	}
+	if shouldDeferTokenModelLimitCheck(true, "sora-2") {
+		t.Fatal("POST generate with model name must not defer token model limit check")
+	}
+	if shouldDeferTokenModelLimitCheck(true, "") {
+		t.Fatal("generate request with empty model must still run token model limit check")
+	}
+}

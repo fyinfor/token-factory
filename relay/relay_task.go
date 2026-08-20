@@ -68,6 +68,13 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	if !exist {
 		return service.TaskErrorWrapperLocal(errors.New("task_origin_not_exist"), "task_not_exist", http.StatusBadRequest)
 	}
+	if !service.TokenAllowsModel(c, originTask.GetFetchAccessModelName()) {
+		return service.TaskErrorWrapperLocal(
+			errors.New(service.TokenModelForbiddenMessage(c, originTask.GetFetchAccessModelName())),
+			"token_model_forbidden",
+			http.StatusForbidden,
+		)
+	}
 
 	// 从原始任务推导模型名称
 	if info.OriginModelName == "" {
@@ -370,7 +377,6 @@ func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 }
 
 func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
-	userId := c.GetInt("id")
 	var condition = struct {
 		IDs    []any  `json:"ids"`
 		Action string `json:"action"`
@@ -382,9 +388,9 @@ func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.Ta
 	}
 	var tasks []any
 	if len(condition.IDs) > 0 {
-		taskModels, err := model.GetByTaskIds(userId, condition.IDs)
-		if err != nil {
-			taskResp = service.TaskErrorWrapper(err, "get_tasks_failed", http.StatusInternalServerError)
+		taskModels, loadErr := service.LoadTasksForAsyncFetch(c, condition.IDs)
+		if loadErr != nil {
+			taskResp = loadErr
 			return
 		}
 		for _, task := range taskModels {
@@ -401,23 +407,19 @@ func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.Ta
 }
 
 func sunoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
-	taskId := c.Param("id")
-	userId := c.GetInt("id")
-
-	originTask, exist, err := model.GetByTaskId(userId, taskId)
-	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
-		return
-	}
-	if !exist {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+	originTask, loadErr := service.LoadTaskForAsyncFetch(c, c.Param("id"))
+	if loadErr != nil {
+		taskResp = loadErr
 		return
 	}
 
-	respBody, err = common.Marshal(dto.TaskResponse[any]{
+	respBody, err := common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
 		Data: TaskModel2Dto(originTask),
 	})
+	if err != nil {
+		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	}
 	return
 }
 
@@ -443,15 +445,9 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	if taskId == "" {
 		taskId = c.GetString("task_id")
 	}
-	userId := c.GetInt("id")
-
-	originTask, exist, err := model.GetByTaskId(userId, taskId)
-	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
-		return
-	}
-	if !exist {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
+	originTask, loadErr := service.LoadTaskForAsyncFetch(c, taskId)
+	if loadErr != nil {
+		taskResp = loadErr
 		return
 	}
 
@@ -498,7 +494,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	}
 
 	// 通用 TaskDto 格式
-	respBody, err = common.Marshal(dto.TaskResponse[any]{
+	respBody, err := common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
 		Data: TaskModel2Dto(originTask),
 	})

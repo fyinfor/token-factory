@@ -128,23 +128,26 @@ func Distribute() func(c *gin.Context) {
 		} else {
 			// Select a channel for the user
 			// check token model mapping
-			modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
-			if modelLimitEnable {
-				s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
-				if !ok {
-					// token model limit is empty, all models are not allowed
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
-					return
-				}
-				tokenModelLimit, ok := s.(map[string]bool)
-				if !ok || len(tokenModelLimit) == 0 {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
-					return
-				}
-				// 修复点：使用与 GetModelLimitsMap 一致的匹配逻辑，兼容 gizmo/thinking-* 等规范化模型名
-				if !model.ModelLimitMapAllows(tokenModelLimit, modelRequest.Model) {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
-					return
+			// GET 查询/remix 等无请求体模型名：此时不应拦截，等拿到任务模型后再复用同一套白名单。
+			if !shouldDeferTokenModelLimitCheck(shouldSelectChannel, modelRequest.Model) {
+				modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
+				if modelLimitEnable {
+					s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+					if !ok {
+						// token model limit is empty, all models are not allowed
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
+						return
+					}
+					tokenModelLimit, ok := s.(map[string]bool)
+					if !ok || len(tokenModelLimit) == 0 {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
+						return
+					}
+					// 修复点：使用与 GetModelLimitsMap 一致的匹配逻辑，兼容 gizmo/thinking-* 等规范化模型名
+					if !model.ModelLimitMapAllows(tokenModelLimit, modelRequest.Model) {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
+						return
+					}
 				}
 			}
 
@@ -498,6 +501,12 @@ func getModelFromRequest(c *gin.Context) (*ModelRequest, error) {
 		return nil, errors.New(i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 	}
 	return &modelRequest, nil
+}
+
+// shouldDeferTokenModelLimitCheck 查询类接口 GET 无请求体，模型名此时为空。
+// 若在分发阶段用空模型做白名单校验，会误报 "This token has no access to model"。
+func shouldDeferTokenModelLimitCheck(shouldSelectChannel bool, modelName string) bool {
+	return !shouldSelectChannel && strings.TrimSpace(modelName) == ""
 }
 
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
