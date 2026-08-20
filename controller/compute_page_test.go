@@ -10,15 +10,16 @@ import (
 func TestComputePageContentSecurityPolicy(t *testing.T) {
 	t.Run("javascript disabled", func(t *testing.T) {
 		policy := computePageContentSecurityPolicy(false, false)
-		require.Contains(t, policy, "sandbox allow-same-origin")
+		require.Contains(t, policy, "sandbox allow-same-origin allow-forms")
 		require.NotContains(t, policy, "allow-popups")
 		require.NotContains(t, policy, "allow-scripts")
 		require.NotContains(t, policy, "script-src")
+		require.Contains(t, policy, "form-action 'self' https: http:")
 	})
 
 	t.Run("javascript enabled without external links", func(t *testing.T) {
 		policy := computePageContentSecurityPolicy(true, false)
-		require.Contains(t, policy, "sandbox allow-same-origin allow-scripts")
+		require.Contains(t, policy, "sandbox allow-same-origin allow-forms allow-scripts")
 		require.NotContains(t, policy, "allow-popups")
 		require.Contains(t, policy, "script-src 'unsafe-inline' 'unsafe-eval'")
 		require.Contains(t, policy, "connect-src https: http: ws: wss:")
@@ -27,7 +28,7 @@ func TestComputePageContentSecurityPolicy(t *testing.T) {
 
 	t.Run("external links enabled without javascript", func(t *testing.T) {
 		policy := computePageContentSecurityPolicy(false, true)
-		require.Contains(t, policy, "sandbox allow-same-origin allow-popups allow-popups-to-escape-sandbox")
+		require.Contains(t, policy, "sandbox allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox")
 		require.NotContains(t, policy, "allow-scripts")
 		require.NotContains(t, policy, "script-src")
 	})

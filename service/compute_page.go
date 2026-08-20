@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,9 +29,13 @@ type ComputePageConfig struct {
 	Enabled         bool   `json:"enabled"`
 	AllowJavaScript bool   `json:"allow_javascript"`
 	AllowPopups     bool   `json:"allow_popups"`
+	ContentURL      string `json:"content_url"`
+	RedirectToURL   bool   `json:"redirect_to_url"`
 	FileName        string `json:"file_name"`
 	UpdatedAt       int64  `json:"updated_at"`
 	HasHTML         bool   `json:"-"`
+	HasURL          bool   `json:"-"`
+	HasContent      bool   `json:"-"`
 }
 
 func computePageDir() string {
@@ -51,7 +56,7 @@ func readComputePageConfigLocked() (ComputePageConfig, error) {
 	data, err := os.ReadFile(computePageConfigPath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			config.HasHTML = computePageHTMLExists()
+			populateComputePageAvailability(&config)
 			return config, nil
 		}
 		return config, fmt.Errorf("读取算力页面配置失败: %w", err)
@@ -60,8 +65,29 @@ func readComputePageConfigLocked() (ComputePageConfig, error) {
 		return config, fmt.Errorf("解析算力页面配置失败: %w", err)
 	}
 	config.FileName = strings.TrimSpace(config.FileName)
-	config.HasHTML = computePageHTMLExists()
+	config.ContentURL, _ = normalizeComputePageURL(config.ContentURL)
+	populateComputePageAvailability(&config)
 	return config, nil
+}
+
+func normalizeComputePageURL(rawURL string) (string, error) {
+	contentURL := strings.TrimSpace(rawURL)
+	if contentURL == "" {
+		return "", nil
+	}
+
+	parsedURL, err := url.ParseRequestURI(contentURL)
+	if err != nil || parsedURL.Host == "" ||
+		(parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return "", errors.New("网址必须是有效的 HTTP 或 HTTPS 地址")
+	}
+	return contentURL, nil
+}
+
+func populateComputePageAvailability(config *ComputePageConfig) {
+	config.HasHTML = computePageHTMLExists()
+	config.HasURL = config.ContentURL != ""
+	config.HasContent = config.HasHTML || config.HasURL
 }
 
 func computePageHTMLExists() bool {
@@ -120,6 +146,8 @@ func writeFileAtomic(targetPath string, data []byte, permission os.FileMode) err
 
 func writeComputePageConfigLocked(config ComputePageConfig) error {
 	config.HasHTML = false
+	config.HasURL = false
+	config.HasContent = false
 	data, err := common.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("生成算力页面配置失败: %w", err)
@@ -144,15 +172,15 @@ func UpdateComputePageEnabled(enabled bool) (ComputePageConfig, error) {
 	if err != nil {
 		return config, err
 	}
-	if enabled && !config.HasHTML {
-		return config, errors.New("请先上传 HTML 文件")
+	if enabled && !config.HasContent {
+		return config, errors.New("请先填写网址或上传 HTML 文件")
 	}
 	config.Enabled = enabled
 	config.UpdatedAt = time.Now().Unix()
 	if err := writeComputePageConfigLocked(config); err != nil {
 		return config, err
 	}
-	config.HasHTML = computePageHTMLExists()
+	populateComputePageAvailability(&config)
 	return config, nil
 }
 
@@ -169,7 +197,7 @@ func UpdateComputePageJavaScriptAllowed(allowed bool) (ComputePageConfig, error)
 	if err := writeComputePageConfigLocked(config); err != nil {
 		return config, err
 	}
-	config.HasHTML = computePageHTMLExists()
+	populateComputePageAvailability(&config)
 	return config, nil
 }
 
@@ -186,7 +214,51 @@ func UpdateComputePagePopupsAllowed(allowed bool) (ComputePageConfig, error) {
 	if err := writeComputePageConfigLocked(config); err != nil {
 		return config, err
 	}
-	config.HasHTML = computePageHTMLExists()
+	populateComputePageAvailability(&config)
+	return config, nil
+}
+
+func UpdateComputePageURL(rawURL string) (ComputePageConfig, error) {
+	computePageMutex.Lock()
+	defer computePageMutex.Unlock()
+
+	config, err := readComputePageConfigLocked()
+	if err != nil {
+		return config, err
+	}
+	contentURL, err := normalizeComputePageURL(rawURL)
+	if err != nil {
+		return config, err
+	}
+	config.ContentURL = contentURL
+	if contentURL == "" {
+		config.RedirectToURL = false
+	}
+	config.UpdatedAt = time.Now().Unix()
+	if err := writeComputePageConfigLocked(config); err != nil {
+		return config, err
+	}
+	populateComputePageAvailability(&config)
+	return config, nil
+}
+
+func UpdateComputePageRedirectToURL(enabled bool) (ComputePageConfig, error) {
+	computePageMutex.Lock()
+	defer computePageMutex.Unlock()
+
+	config, err := readComputePageConfigLocked()
+	if err != nil {
+		return config, err
+	}
+	if enabled && !config.HasURL {
+		return config, errors.New("请先填写网址")
+	}
+	config.RedirectToURL = enabled
+	config.UpdatedAt = time.Now().Unix()
+	if err := writeComputePageConfigLocked(config); err != nil {
+		return config, err
+	}
+	populateComputePageAvailability(&config)
 	return config, nil
 }
 
@@ -206,7 +278,7 @@ func SaveComputePageHTML(fileName string, content []byte) (ComputePageConfig, er
 	if err := writeComputePageConfigLocked(config); err != nil {
 		return config, err
 	}
-	config.HasHTML = true
+	populateComputePageAvailability(&config)
 	return config, nil
 }
 
