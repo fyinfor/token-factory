@@ -213,7 +213,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
       }
 
       const res = await API.get(url);
-      const { success, message, data } = res.data;
+      const { success, message, data, mxxh } = res.data;
       if (success) {
         setQuotaData(data);
         if (data.length === 0) {
@@ -225,10 +225,10 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
           });
         }
         data.sort((a, b) => a.created_at - b.created_at);
-        return data;
+        return { data, mxxh };
       } else {
         showError(message);
-        return [];
+        return { data: [], mxxh: 1 };
       }
     } finally {
       setLoading(false);
@@ -273,9 +273,9 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
 
   const handleSearchConfirm = useCallback(
     async (updateChartDataCallback) => {
-      const data = await refresh();
-      if (data && data.length > 0 && updateChartDataCallback) {
-        updateChartDataCallback(data);
+      const result = await refresh();
+      if (result?.data?.length > 0 && updateChartDataCallback) {
+        updateChartDataCallback(result.data, result.mxxh);
       }
       setSearchModalVisible(false);
     },
