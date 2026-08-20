@@ -18,6 +18,7 @@ const { Text, Title } = Typography;
 
 /**
  * PriceImportExport 价格导入/导出操作区。
+ * 导出覆盖全局 + 渠道模型定价，含视频按 token / 视频超分 / ASR 按秒等配置。
  * @param {{ refresh: () => void }} props
  */
 export default function PriceImportExport({ refresh }) {

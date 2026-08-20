@@ -69,6 +69,7 @@ export const VIDEO_PRICING_JSON_RESOLUTION_KEYS = [
 
 export const VIDEO_PRICING_JSON_BILLING_MODES = ['per-item', 'per-second', 'per-token'];
 export const VIDEO_PRICING_JSON_PRICE_UNITS = ['USD', 'CNY', 'CUSTOM'];
+export const VIDEO_PRICING_JSON_UPSCALE_KEY = 'video_upscale';
 
 const SECTION_META = [
   { key: 'text_to_video', comment: '文生视频' },
@@ -205,6 +206,63 @@ const serializeSectionMapFull = (rows, perItem) => {
   return out;
 };
 
+/** 视频超分：[{ source, target, price }]，分辨率用 JSON 简写键 */
+const serializeUpscaleRows = (rows) => {
+  const out = [];
+  for (const row of rows || []) {
+    const target = normalizeResolutionKey(
+      row?.resolution || row?.target || '',
+    );
+    const price = toPriceNumber(row?.tokenPrice ?? row?.price);
+    if (!target || price === null) continue;
+    const item = {
+      target: resolutionToShortKey(target),
+      price,
+    };
+    const sourceRaw = row?.sourceResolution || row?.source_resolution || row?.source;
+    const source = normalizeResolutionKey(sourceRaw || '');
+    if (source) {
+      item.source = resolutionToShortKey(source);
+    }
+    out.push(item);
+  }
+  return out;
+};
+
+const parseUpscaleRows = (data) => {
+  if (data === undefined || data === null) {
+    return null;
+  }
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  return data
+    .map((row) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        return null;
+      }
+      const resolution = normalizeResolutionKey(
+        row.resolution || row.target || '',
+      );
+      if (!resolution) return null;
+      const price = toPriceNumber(row.price ?? row.tokenPrice ?? row.token_price);
+      if (price === null) return null;
+      const source = normalizeResolutionKey(
+        row.source_resolution || row.sourceResolution || row.source || '',
+      );
+      return {
+        resolution,
+        sourceResolution: source,
+        tokenPrice: String(price),
+        videoPrice: '',
+        noAudioPrice: '',
+        withAudioPrice: '',
+        audioPricingEnabled: false,
+      };
+    })
+    .filter((row) => row !== null);
+};
+
 /** 视频生视频：合并 upload / generate（与后端 video_to_video_* 一致，后者覆盖同分辨率） */
 const serializeVideoToVideoSectionFull = (
   uploadRules,
@@ -248,6 +306,7 @@ export const buildVideoPricingJsonEditor = (model) => {
       model.videoGenerateRules,
       perItem,
     ),
+    video_upscale: serializeUpscaleRows(model.videoUpscaleRules),
   };
 };
 
@@ -268,8 +327,7 @@ export const stringifyVideoPricingJsonEditor = (model) => {
     '  // 三大类：文生 / 图生 / 视频生视频；各分辨率 [] 未启用，[价] 统一，[无音轨, 有音轨] 分开',
   );
 
-  SECTION_META.forEach((section, sectionIndex) => {
-    const isLastSection = sectionIndex === SECTION_META.length - 1;
+  SECTION_META.forEach((section) => {
     out.push(`  // ${section.comment}`);
     out.push('  "' + section.key + '": {');
     VIDEO_PRICING_JSON_RESOLUTION_KEYS.forEach((resKey, resIndex) => {
@@ -278,8 +336,12 @@ export const stringifyVideoPricingJsonEditor = (model) => {
         resIndex < VIDEO_PRICING_JSON_RESOLUTION_KEYS.length - 1 ? ',' : '';
       out.push(`    "${resKey}": ${JSON.stringify(prices)}${resComma}`);
     });
-    out.push(`  }${isLastSection ? '' : ','}`);
+    out.push('  },');
   });
+  out.push('  // 视频超分按秒：source 原分辨率 → target 超分分辨率，price 为每秒单价');
+  out.push(
+    `  "${VIDEO_PRICING_JSON_UPSCALE_KEY}": ${JSON.stringify(data.video_upscale || [], null, 2).replace(/\n/g, '\n  ')}`,
+  );
   out.push('}');
   return out.join('\n');
 };
@@ -490,6 +552,12 @@ export const mergeVideoPricingFromJsonEditor = (model, jsonObj) => {
       model.videoSimilarityThreshold,
   );
 
+  const upscaleRaw =
+    jsonObj.video_upscale ??
+    jsonObj.videoUpscale ??
+    jsonObj.video_upscale_per_second;
+  const parsedUpscale = parseUpscaleRows(upscaleRaw);
+
   return {
     ok: true,
     model: {
@@ -515,13 +583,15 @@ export const mergeVideoPricingFromJsonEditor = (model, jsonObj) => {
           videoGenerateRules: videoToVideoRows.map((row) => ({ ...row })),
         };
       })(),
+      videoUpscaleRules:
+        parsedUpscale === null ? model.videoUpscaleRules || [] : parsedUpscale,
     },
   };
 };
 
 export const VIDEO_PRICING_JSON_PLACEHOLDER = `{
-  // billing_mode: per-item（按条）| per-second（按秒）
-  "billing_mode": "per-item",
+  // billing_mode: per-item（按条）| per-second（按秒）| per-token（按 token）
+  "billing_mode": "per-token",
   // price_unit: USD | CNY | CUSTOM
   "price_unit": "USD",
   // 无分辨率表时的兜底单价
@@ -558,5 +628,9 @@ export const VIDEO_PRICING_JSON_PLACEHOLDER = `{
     "1080": [],
     "2k": [],
     "4k": []
-  }
+  },
+  // 视频超分按秒：source 原分辨率 → target 超分分辨率
+  "video_upscale": [
+    { "source": "480", "target": "720", "price": 0.02 }
+  ]
 }`;
