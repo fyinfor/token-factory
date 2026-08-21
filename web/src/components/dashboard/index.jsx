@@ -93,18 +93,18 @@ const Dashboard = () => {
 
   // ========== 数据处理 ==========
   const initChart = async () => {
-    await dashboardData.loadQuotaData().then((data) => {
-      if (data && data.length > 0) {
-        dashboardCharts.updateChartData(data);
+    await dashboardData.loadQuotaData().then((result) => {
+      if (result?.data?.length > 0) {
+        dashboardCharts.updateChartData(result.data, result.mxxh);
       }
     });
     await dashboardData.loadUptimeData();
   };
 
   const handleRefresh = async () => {
-    const data = await dashboardData.refresh();
-    if (data && data.length > 0) {
-      dashboardCharts.updateChartData(data);
+    const result = await dashboardData.refresh();
+    if (result?.data?.length > 0) {
+      dashboardCharts.updateChartData(result.data, result.mxxh);
     }
   };
 
