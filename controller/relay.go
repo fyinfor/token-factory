@@ -171,6 +171,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	// JD 采K3测试技术对接 - kimi‑k3专属特殊适配
+	if helper.AbortIfKimiK3EmptyUser(c, request) {
+		return
+	}
+
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		tokenFactoryError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
