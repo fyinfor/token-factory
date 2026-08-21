@@ -2445,12 +2445,6 @@ const PricingCardView = ({
       }
     };
 
-    const openBasicInfo = () => {
-      if (!blurPricing && openModelDetail) {
-        openModelDetail(model, 'basic');
-      }
-    };
-
     return (
       <Card
         key={modelKey || index}
@@ -2575,8 +2569,8 @@ const PricingCardView = ({
           {modelDescription ? (
             <AdaptiveModelDescription
               style={pricingBlurStyle}
-              onClick={openBasicInfo}
-              ariaLabel={`${t('点击查看')} ${t('基本信息')}`}
+              onClick={openDetail}
+              ariaLabel={`${t('点击查看')} ${t('通用与渠道')}`}
             >
               {renderHighlightedText(modelDescription)}
             </AdaptiveModelDescription>
