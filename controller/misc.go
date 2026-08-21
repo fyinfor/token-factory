@@ -274,7 +274,6 @@ func GetStatus(c *gin.Context) {
 
 		// 路由能力开关（供前端隐藏 TokenFactory 智能路由 UI；实际选路见 middleware/distributor）
 		"tokenfactory_route_enabled": common.TokenFactoryRouteEnabled(),
-		"smart_router_enabled":       service.SmartRouterEnabled(),
 	}
 
 	// 根据启用状态注入可选内容

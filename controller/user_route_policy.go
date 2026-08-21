@@ -72,11 +72,12 @@ func UserGetRoutePolicy(c *gin.Context) {
 			})
 		}
 		groups = append(groups, gin.H{
-			"group_key":     g.GroupKey,
-			"display_name":  g.DisplayName,
-			"models":        g.Models,
-			"channel_count": g.ChannelCount,
-			"channels":      channels,
+			"group_key":      g.GroupKey,
+			"display_name":   g.DisplayName,
+			"models":         g.Models,
+			"channel_count":  g.ChannelCount,
+			"channels":       channels,
+			"route_disabled": g.RouteDisabled,
 		})
 	}
 
@@ -287,4 +288,42 @@ func UserDeleteRouteOverride(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "override deleted"})
+}
+
+// UserUpdateGroupRoute 更新某归类是否关闭智能路由。
+func UserUpdateGroupRoute(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
+	userID := c.GetInt("id")
+	if userID <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var req struct {
+		GroupKey string `json:"group_key"`
+		Disabled *bool  `json:"disabled"`
+	}
+	bodyBytes, readErr := io.ReadAll(c.Request.Body)
+	if readErr != nil && readErr != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "read body: " + readErr.Error()})
+		return
+	}
+	if len(bodyBytes) > 0 {
+		if err := common.Unmarshal(bodyBytes, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json: " + err.Error()})
+			return
+		}
+	}
+	if req.GroupKey == "" || req.Disabled == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_key and disabled are required"})
+		return
+	}
+
+	if err := model.SetUserModelGroupRouteDisabled(userID, req.GroupKey, *req.Disabled); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "group route updated", "disabled": *req.Disabled})
 }

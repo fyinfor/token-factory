@@ -12,7 +12,7 @@ import (
 // ── 进程内归类路由（从 TokenFactory gRPC 剥离）──────────────────
 //
 // 使用本地 channels 表 + 路由配置表，不再依赖外部 TokenFactory。
-// 排序算法：weight / price；default 模式返回 fallback=true，由调用方走原生选路。
+// 排序算法：weight / price 走 router-engine；default 模式按渠道 ID 顺序（路由关闭）。
 
 // RouteChannelCandidate 选路候选（由本地渠道构建）。
 type RouteChannelCandidate struct {
@@ -48,10 +48,6 @@ func SelectChannelLocal(modelName string, userID int, candidates []RouteChannelC
 		mode = model.GetRouteConfig().Mode
 	}
 
-	if !model.IsImplementedRouteMode(mode) {
-		return SelectChannelLocalResult{Strategy: mode, Fallback: true}
-	}
-
 	// Status=0 视为调用方已过滤；否则仅保留启用渠道。
 	filtered := make([]RouteChannelCandidate, 0, len(candidates))
 	for _, c := range candidates {
@@ -67,6 +63,10 @@ func SelectChannelLocal(modelName string, userID int, candidates []RouteChannelC
 		userOverrides, _ = model.LoadUserModelGroupOverrides(userID)
 	}
 	groupKey := ResolveModelGroupKeyWithUser(modelName, userOverrides, globalOverrides)
+	mode = ApplyGroupRouteDisableForModel(userID, modelName, groupKey, mode)
+	if !model.IsImplementedRouteMode(mode) {
+		return SelectChannelLocalResult{Strategy: mode, GroupKey: groupKey, Fallback: true}
+	}
 
 	var ordered []RouteChannelCandidate
 	switch mode {
@@ -75,7 +75,7 @@ func SelectChannelLocal(modelName string, userID int, candidates []RouteChannelC
 	case model.RouteModePrice:
 		ordered = sortRouteCandidatesByPrice(filtered)
 	default:
-		return SelectChannelLocalResult{Strategy: mode, Fallback: true}
+		return SelectChannelLocalResult{Strategy: mode, GroupKey: groupKey, Fallback: true}
 	}
 
 	if len(ordered) == 0 {

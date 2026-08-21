@@ -68,13 +68,47 @@ func Distribute() func(c *gin.Context) {
 				indexRoute, _, _ := service.ParseModelRouteIndex(modelRequest.Model)
 				if indexRoute != nil {
 					originalModelKey := modelRequest.Model
-					if err := service.ApplyModelRouteOnRequestBody(c, indexRoute, originalModelKey); err != nil {
-						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
-						return
-					}
-					modelRequest.Model = indexRoute.ModelName
+					userID := c.GetInt("id")
+					// routeOn=false 覆盖：全局关闭路由 / 用户选关闭 / 该模型归类关闭。
+					routeOn := service.EffectiveRouteStrategyEnabled(userID, indexRoute.ModelName)
+					playgroundPin := isPlaygroundChannelPinPath(c)
 					if indexRoute.ChannelID <= 0 {
-						logger.LogInfo(c, fmt.Sprintf("route_slug=%s unavailable or disabled, stripped to model=%s for same-model smart route", indexRoute.RouteSlug, indexRoute.ModelName))
+						ch := model.LookupChannelByRouteSlug(indexRoute.RouteSlug)
+						// 智能路由开启（且非操练场）：后缀不可用/不存在 → 剥后缀走同模型智能路由，失败可切换。
+						// 路由关闭 / 操练场：后缀必须可用，否则直接拒绝。
+						if routeOn && !playgroundPin {
+							reason := "not_found"
+							if ch != nil && ch.Status != common.ChannelStatusEnabled {
+								reason = fmt.Sprintf("disabled(id=%d)", ch.Id)
+							} else if ch != nil {
+								reason = fmt.Sprintf("missing_model(id=%d)", ch.Id)
+							}
+							logger.LogInfo(c, fmt.Sprintf("route_slug=%s unavailable (%s) for model=%s, fallback to smart route", indexRoute.RouteSlug, reason, indexRoute.ModelName))
+							if err := service.ApplyModelRouteOnRequestBody(c, indexRoute, originalModelKey); err != nil {
+								abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+								return
+							}
+							modelRequest.Model = indexRoute.ModelName
+						} else {
+							logger.LogInfo(c, fmt.Sprintf("route_slug=%s unavailable for model=%s (channel_found=%v, route_on=%v)", indexRoute.RouteSlug, indexRoute.ModelName, ch != nil, routeOn))
+							if ch != nil && ch.Status != common.ChannelStatusEnabled {
+								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+								return
+							}
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId), types.ErrorCodeInvalidRequest)
+							return
+						}
+					} else {
+						if err := service.ApplyModelRouteOnRequestBody(c, indexRoute, originalModelKey); err != nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+							return
+						}
+						modelRequest.Model = indexRoute.ModelName
+						if !routeOn || playgroundPin {
+							// 路由关闭 / 归类关闭 / 操练场：硬指定，失败不切换。
+							common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(indexRoute.ChannelID))
+						}
+						// 智能路由开启：仅写 PreferredChannelID，首跳优先该渠道，失败后有序切换。
 					}
 				} else {
 					// 未命中以上两种格式时再尝试两段形式（{alias}/{model}）。
@@ -204,31 +238,47 @@ func Distribute() func(c *gin.Context) {
 					videoSubmitFilter = endpointChannelFilter
 				}
 
-				// 命中「route_slug 偏好渠道」（{model}/{route_slug}）：首跳优先该渠道；
-				// 同时写入同模型智能路由有序候选，失败后可按价格/权重保底重试。
-				// 偏好渠道已关闭/不存在时：清除偏好，落入下方同模型智能路由（模型名已剥后缀）。
+				// 命中「route_slug 偏好渠道」（{model}/{route_slug}）：
+				// - 智能路由开启：优先该渠道，失败按同模型有序候选切换；
+				// - 路由关闭 / 操练场：硬指定，失败不切换。
 				if rawPref, hasPref := common.GetContextKey(c, constant.ContextKeyPreferredChannelID); hasPref {
 					if preferredID, pok := rawPref.(int); pok && preferredID > 0 {
 						preferredChannel, perr := model.CacheGetChannel(preferredID)
 						preferOK := perr == nil && preferredChannel != nil && preferredChannel.Status == common.ChannelStatusEnabled
-						// 用户指定价：偏好渠道超出价格上限时清除偏好，回落同模型智能路由（可保底切换）。
+						routeOn := service.EffectiveRouteStrategyEnabled(c.GetInt("id"), modelRequest.Model)
+						hardPin := !routeOn || isPlaygroundChannelPinPath(c) || service.ContextNoFailover(c)
+						if _, hasSpecific := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); hasSpecific {
+							hardPin = true
+						}
+
 						if preferOK && !service.ChannelWithinUserPriceCap(c.GetInt("id"), modelRequest.Model, preferredChannel) {
+							if hardPin {
+								abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("指定渠道价格超出您对模型 %s 的指定价上限，禁止调用", modelRequest.Model))
+								return
+							}
 							logger.LogInfo(c, fmt.Sprintf("route_slug preferred channel (id=%d) exceeds user price cap, fallback to same-model smart route for model=%s", preferredID, modelRequest.Model))
 							preferOK = false
 						}
-						// 视频创建：偏好渠不具备视频 endpoint 时回落智能/有序保底池。
 						if preferOK && videoSubmitFilter != nil && !videoSubmitFilter(preferredChannel) {
+							if hardPin {
+								abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId), types.ErrorCodeInvalidRequest)
+								return
+							}
 							logger.LogInfo(c, fmt.Sprintf("route_slug preferred channel (id=%d) lacks video endpoint, fallback to same-model video smart route for model=%s", preferredID, modelRequest.Model))
 							preferOK = false
 						}
 						if !preferOK {
+							if hardPin {
+								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+								return
+							}
 							logger.LogInfo(c, fmt.Sprintf("route_slug preferred channel unavailable (id=%d), fallback to same-model smart route for model=%s", preferredID, modelRequest.Model))
 							common.SetContextKey(c, constant.ContextKeyPreferredChannelID, 0)
 						} else {
 							var ordered []int
-							if service.ContextNoFailover(c) {
-								// 关 failover 时只保留偏好渠道，避免有序候选被后续路径消费。
+							if hardPin {
 								ordered = []int{preferredID}
+								common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(preferredID))
 							} else if videoSubmitFilter != nil {
 								ordered = service.BuildPreferredChannelFailoverOrderWithFilter(c, modelRequest.Model, usingGroup, preferredID, videoSubmitFilter)
 								if len(ordered) == 0 {
@@ -268,26 +318,15 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				// ★ 进程内归类路由（原 TokenFactory 策略已本地化）：在原生选路之前尝试。
-				// weight/price 模式命中则直接使用；default / 未实现则回退。
-				if common.TokenFactoryRouteEnabled() && !ok {
-					if tfChannel, ok := tryTokenFactoryRoute(c, modelRequest.Model, usingGroup, videoSubmitFilter); ok && tfChannel != nil {
-						channel = tfChannel
-						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-						logSelectedUpstream(c, channel, modelRequest.Model, "local_route")
-						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-						proceedRelayWithChannel(c, channel, modelRequest.Model)
-						return
-					}
-				}
+				// 统一 router-engine 选路在 forced supplier / 亲和渠道之后执行（见下方 channel == nil 分支）。
 
 				// 命中「指定供应商 + 任意渠道」：跳过亲和选择，直接在供应商内按 SmartRouter / 优先级挑选。
 				// 若候选池为空，直接报"无可用渠道"，不再回落到跨供应商的全局池，保持用户显式意图。
 				if forcedSupplierID, hasForcedSupplier := service.ForcedSupplierFromContext(c); hasForcedSupplier {
 					providerJSON := common.GetContextKeyString(c, constant.ContextKeyOpenRouterProviderJSON)
 					service.IngestChatCompletionRoutingHints(c, modelRequest.Model)
-					ch, sg, ok := service.TrySupplierRouteChannelWithFilter(c, usingGroup, userGroup, modelRequest.Model, providerJSON, forcedSupplierID, videoSubmitFilter)
-					if !ok || ch == nil {
+					ch, sg, routeOK := service.TrySupplierEngineRoute(c, usingGroup, userGroup, modelRequest.Model, providerJSON, forcedSupplierID, videoSubmitFilter)
+					if !routeOK || ch == nil {
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
@@ -339,64 +378,24 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
-					var err error
+					userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 					providerJSON := common.GetContextKeyString(c, constant.ContextKeyOpenRouterProviderJSON)
+					var routeFilter func(*model.Channel) bool
 					if videoSubmitFilter != nil {
-						// 视频创建：过滤后智能排序，并写入完整有序候选供 submit 失败保底切换。
-						if ch, sg, ok := service.TrySmartRouteChannelWithFilter(c, usingGroup, userGroup, modelRequest.Model, providerJSON, videoSubmitFilter); ok {
-							channel = ch
-							selectGroup = sg
-							if usingGroup == "auto" {
-								common.SetContextKey(c, constant.ContextKeyAutoGroup, sg)
-							}
-							logger.LogInfo(c, fmt.Sprintf("smart_video route selected: channel=%s(id=%d) model=%s group=%s", ch.Name, ch.Id, modelRequest.Model, sg))
-						}
+						routeFilter = videoSubmitFilter
 					} else if endpointChannelFilter != nil {
-						// 图片等：保持原 first-match 能力过滤（首期不启用智能有序保底）。
-						if usingGroup == "auto" {
-							for _, autoGroup := range service.GetUserAutoGroup(userGroup) {
-								if ch, ok := service.TryGroupRouteChannelWithFilter(autoGroup, modelRequest.Model, endpointChannelFilter); ok {
-									channel = ch
-									selectGroup = autoGroup
-									common.SetContextKey(c, constant.ContextKeyAutoGroup, autoGroup)
-									break
-								}
-							}
-						} else if ch, ok := service.TryGroupRouteChannelWithFilter(usingGroup, modelRequest.Model, endpointChannelFilter); ok {
-							channel = ch
-							selectGroup = usingGroup
-						}
-					} else if ch, sg, ok := service.TrySmartRouteChannel(c, usingGroup, userGroup, modelRequest.Model, providerJSON); ok {
+						routeFilter = endpointChannelFilter
+					}
+					if ch, sg, routeOK := service.TryEngineRoute(c, usingGroup, userGroup, modelRequest.Model, providerJSON, routeFilter); routeOK {
 						channel = ch
 						selectGroup = sg
-						if usingGroup == "auto" {
-							common.SetContextKey(c, constant.ContextKeyAutoGroup, sg)
-						}
-					}
-					if channel == nil && endpointChannelFilter == nil {
-						channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
-							Ctx:        c,
-							ModelName:  modelRequest.Model,
-							TokenGroup: usingGroup,
-							Retry:      common.GetPointer(0),
-						})
-					}
-					if err != nil {
-						showGroup := usingGroup
-						if usingGroup == "auto" {
-							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
-						}
-						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
-						// 如果错误，但是渠道不为空，说明是数据库一致性问题
-						//if channel != nil {
-						//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
-						//	message = "数据库一致性已被破坏，请联系管理员"
-						//}
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
-						return
 					}
 					if channel == nil {
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						showGroup := usingGroup
+						if usingGroup == "auto" && selectGroup != "" {
+							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
+						}
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": showGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
 				}
@@ -407,6 +406,16 @@ func Distribute() func(c *gin.Context) {
 		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 		proceedRelayWithChannel(c, channel, modelRequest.Model)
 	}
+}
+
+func isPlaygroundChannelPinPath(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	path := c.Request.URL.Path
+	return strings.Contains(path, "/playground/") ||
+		strings.Contains(path, "/api/playground/") ||
+		strings.HasPrefix(path, "/pg/")
 }
 
 func parsePlaygroundTFOpenUpstreamRoute(rawModel string) (string, string, bool) {
@@ -873,70 +882,4 @@ func extractModelNameFromGeminiPath(path string) string {
 	return path[startIndex : startIndex+colonIndex]
 }
 
-// tryTokenFactoryRoute 尝试通过进程内归类路由（原 TokenFactory 策略，已本地化）获取渠道。
-// 如果成功返回排序后的第一个渠道，返回 (channel, true)。
-// 如果模式为 default / 未实现 / 无候选，返回 (nil, false)，调用方回退到原生选路。
-// channelFilter 非空时（视频 submit）只在通过过滤的渠道池内排序，并写入有序候选供创建保底。
-func tryTokenFactoryRoute(c *gin.Context, modelName string, group string, channelFilter func(*model.Channel) bool) (*model.Channel, bool) {
-	userID := c.GetInt("id")
-
-	candidates := service.CollectSameModelRouteCandidatesWithFilter(group, modelName, channelFilter)
-	if len(candidates) == 0 {
-		logger.LogInfo(c, fmt.Sprintf("local_route skip: no enabled channels for model=%s group=%s", modelName, group))
-		return nil, false
-	}
-	// 用户指定价：price_cap 按上限过滤；channel_list 按勾选集过滤（智能路由仍自排序）。
-	candidates = service.FilterRouteCandidatesByUserPriceCap(userID, modelName, candidates)
-	if len(candidates) == 0 {
-		logger.LogInfo(c, fmt.Sprintf("local_route skip: no channels within user pricing constraint for model=%s group=%s user=%d", modelName, group, userID))
-		return nil, false
-	}
-
-	res := service.SelectChannelLocal(modelName, userID, candidates)
-	var ordered []int
-	strategy := res.Strategy
-	groupKey := res.GroupKey
-	if res.Fallback {
-		// channel_list：智能路由未启用时，按管理员手动 priority 调用。
-		if service.UserPricingUsesManualChannelPriority(userID, modelName) {
-			sorted := service.SortRouteCandidatesByUserPricingPriority(userID, modelName, candidates)
-			ordered = make([]int, 0, len(sorted))
-			for _, cand := range sorted {
-				ordered = append(ordered, cand.ChannelID)
-			}
-			strategy = model.UserPricingModeChannelList
-			if groupKey == "" {
-				groupKey = modelName
-			}
-			logger.LogInfo(c, fmt.Sprintf("local_route channel_list manual priority for model=%s user=%d ordered=%v", modelName, userID, ordered))
-		} else {
-			logger.LogInfo(c, "local_route skip: 默认/未实现模式或无候选 (fallback)")
-			return nil, false
-		}
-	} else if len(res.OrderedChannelIDs) == 0 {
-		logger.LogInfo(c, "local_route skip: empty ordered channel ids")
-		return nil, false
-	} else {
-		ordered = res.OrderedChannelIDs
-	}
-	if len(ordered) == 0 {
-		logger.LogInfo(c, "local_route skip: empty ordered channel ids after user pricing")
-		return nil, false
-	}
-	isEnabled := func(id int) bool {
-		ch, err := model.CacheGetChannel(id)
-		return err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled
-	}
-	picked, ok := service.TFRoutePickChannel(c, groupKey, group, strategy, ordered, isEnabled)
-	if !ok {
-		logger.LogInfo(c, "local_route skip: 候选均不可用")
-		return nil, false
-	}
-	ch, err := model.CacheGetChannel(picked)
-	if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
-		return nil, false
-	}
-	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
-	logger.LogInfo(c, fmt.Sprintf("local_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, groupKey, strategy, ordered))
-	return ch, true
-}
+// tryTokenFactoryRoute 已废弃，统一由 service.TryEngineRoute 处理。

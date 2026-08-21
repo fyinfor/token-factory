@@ -279,8 +279,6 @@ const EditChannelModal = (props) => {
     route_slug: '',
     sync_key: '',
     groups: ['default'],
-    priority: 0,
-    weight: 0,
     price_discount_percent: 100,
     operating_cost_percent: 0,
     markup_discount_rate: 0,
@@ -1403,8 +1401,6 @@ const EditChannelModal = (props) => {
         (data.header_override && data.header_override.trim()) ||
         (data.tag && data.tag.trim()) ||
         (data.remark && data.remark.trim()) ||
-        (data.priority && data.priority !== 0) ||
-        (data.weight && data.weight !== 0) ||
         (data.proxy && data.proxy.trim()) ||
         (data.system_prompt && data.system_prompt.trim()) ||
         data.thinking_to_content ||
@@ -3408,33 +3404,6 @@ const EditChannelModal = (props) => {
                     showClear
                     onChange={(value) => handleInputChange('remark', value)}
                   />
-
-                  <Row gutter={12}>
-                    <Col span={12}>
-                      <Form.InputNumber
-                        field='priority'
-                        label={t('渠道优先级')}
-                        placeholder={t('渠道优先级')}
-                        min={0}
-                        onNumberChange={(value) =>
-                          handleInputChange('priority', value)
-                        }
-                        style={{ width: '100%' }}
-                      />
-                    </Col>
-                    <Col span={12}>
-                      <Form.InputNumber
-                        field='weight'
-                        label={t('渠道权重')}
-                        placeholder={t('渠道权重')}
-                        min={0}
-                        onNumberChange={(value) =>
-                          handleInputChange('weight', value)
-                        }
-                        style={{ width: '100%' }}
-                      />
-                    </Col>
-                  </Row>
 
                   <Form.InputNumber
                     field='price_discount_percent'

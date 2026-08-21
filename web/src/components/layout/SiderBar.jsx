@@ -66,6 +66,7 @@ const routerMap = {
   'invoice-admin': '/console/invoice-admin',
   'settlement-export': '/console/settlement-export',
   route_policy: '/console/route-policy',
+  admin_route_policy: '/console/admin/route-policy',
   'seedance-material': '/console/seedance/material',
   supplier: null,
   distributor: '/console/distributor/admin',
@@ -306,6 +307,12 @@ const MainSiderBar = ({ onNavigate = () => {} }) => {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('全局路由'),
+        itemKey: 'admin_route_policy',
+        to: '/console/admin/route-policy',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
