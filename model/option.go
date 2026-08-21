@@ -19,6 +19,11 @@ type Option struct {
 	Value string `json:"value"`
 }
 
+const (
+	modelConsumptionDistributionMultiplierKey     = "mxxh"
+	defaultModelConsumptionDistributionMultiplier = 1
+)
+
 func AllOption() ([]*Option, error) {
 	var options []*Option
 	var err error
@@ -52,6 +57,7 @@ func InitOptionMap() {
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
 	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
+	common.OptionMap[modelConsumptionDistributionMultiplierKey] = strconv.Itoa(defaultModelConsumptionDistributionMultiplier)
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
@@ -313,7 +319,36 @@ func InitOptionMap() {
 	}
 
 	common.OptionMapRWMutex.Unlock()
+	if err := ensureModelConsumptionDistributionMultiplierOption(); err != nil {
+		common.SysLog("failed to initialize mxxh option: " + err.Error())
+	}
 	loadOptionsFromDatabase()
+}
+
+func ensureModelConsumptionDistributionMultiplierOption() error {
+	option := Option{Key: modelConsumptionDistributionMultiplierKey}
+	return DB.Where(&Option{Key: modelConsumptionDistributionMultiplierKey}).
+		Attrs(Option{Value: strconv.Itoa(defaultModelConsumptionDistributionMultiplier)}).
+		FirstOrCreate(&option).Error
+}
+
+// GetModelConsumptionDistributionMultiplier reads the global display-only
+// multiplier directly from the database so manual option updates take effect
+// on the next dashboard refresh. Missing or invalid values use the default.
+func GetModelConsumptionDistributionMultiplier() (int, error) {
+	var option Option
+	result := DB.Select("value").Where(&Option{Key: modelConsumptionDistributionMultiplierKey}).Limit(1).Find(&option)
+	if result.Error != nil {
+		return defaultModelConsumptionDistributionMultiplier, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return defaultModelConsumptionDistributionMultiplier, nil
+	}
+	multiplier, err := strconv.Atoi(strings.TrimSpace(option.Value))
+	if err != nil || multiplier <= 0 {
+		return defaultModelConsumptionDistributionMultiplier, nil
+	}
+	return multiplier, nil
 }
 
 func loadOptionsFromDatabase() {
