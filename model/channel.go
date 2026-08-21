@@ -30,7 +30,6 @@ type Channel struct {
 	TestModel          *string `json:"test_model"`
 	Status             int     `json:"status" gorm:"default:1"`
 	Name               string  `json:"name" gorm:"index"`
-	Weight             *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
 	UpdatedTime        int64   `json:"updated_time" gorm:"bigint"` // 渠道配置最近一次修改时间（Unix 秒级时间戳）
 	TestTime           int64   `json:"test_time" gorm:"bigint"`   // 最近一次渠道测试时间（Unix 秒级时间戳）
@@ -45,7 +44,6 @@ type Channel struct {
 	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
-	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
 	AutoBan           *int    `json:"auto_ban" gorm:"default:1"`
 	OtherInfo         string  `json:"other_info"` // 渠道扩展信息（JSON），测试相关键：last_test_success/last_test_message/last_test_model/last_test_time
 	Tag               *string `json:"tag" gorm:"index"`
@@ -844,20 +842,6 @@ func BatchDeleteChannels(ids []int) error {
 	return tx.Commit().Error
 }
 
-func (channel *Channel) GetPriority() int64 {
-	if channel.Priority == nil {
-		return 0
-	}
-	return *channel.Priority
-}
-
-func (channel *Channel) GetWeight() int {
-	if channel.Weight == nil {
-		return 0
-	}
-	return int(*channel.Weight)
-}
-
 func (channel *Channel) GetBaseURL() string {
 	if channel.BaseURL == nil {
 		return ""
@@ -1196,7 +1180,7 @@ func DisableChannelByTag(tag string) error {
 	return err
 }
 
-func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
+func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
 	shouldReCreateAbilities := false
 	updatedTag := tag
@@ -1215,12 +1199,6 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if group != nil && *group != "" {
 		shouldReCreateAbilities = true
 		updateData.Group = *group
-	}
-	if priority != nil {
-		updateData.Priority = priority
-	}
-	if weight != nil {
-		updateData.Weight = weight
 	}
 	if paramOverride != nil {
 		updateData.ParamOverride = paramOverride
@@ -1244,7 +1222,7 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 			}
 		}
 	} else {
-		err := UpdateAbilityByTag(tag, newTag, priority, weight)
+		err := UpdateAbilityByTag(tag, newTag)
 		if err != nil {
 			return err
 		}

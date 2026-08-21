@@ -7,17 +7,47 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 */
 
-import { API } from './api';
+import { API } from './apiClient';
 import { PLAYGROUND_MEDIA_MAX_COUNT } from '../constants/playground.constants';
+
+export function isUnlimitedMediaCount(max) {
+  return typeof max === 'number' && !Number.isFinite(max) && max > 0;
+}
 
 export function countFilledMediaUrls(urls) {
   return (urls || []).filter((url) => String(url || '').trim()).length;
+}
+
+export function canAddMediaUrlRow(
+  urls,
+  max = PLAYGROUND_MEDIA_MAX_COUNT,
+) {
+  if (isUnlimitedMediaCount(max)) {
+    return true;
+  }
+  return (urls || []).length < max;
+}
+
+export function canAcceptMoreMediaUrls(
+  urls,
+  max = PLAYGROUND_MEDIA_MAX_COUNT,
+) {
+  if (isUnlimitedMediaCount(max)) {
+    return true;
+  }
+  return countFilledMediaUrls(urls) < max;
 }
 
 export function canAddMoreMediaUrls(
   urls,
   max = PLAYGROUND_MEDIA_MAX_COUNT,
 ) {
+  if (isUnlimitedMediaCount(max)) {
+    return true;
+  }
+  if (!canAcceptMoreMediaUrls(urls, max)) {
+    return false;
+  }
   const list = urls || [];
   if (list.length < max) {
     return true;
@@ -35,6 +65,9 @@ export function appendUploadedMediaUrl(
   if (!trimmedUrl) {
     return { urls: next, ok: false };
   }
+  if (!canAcceptMoreMediaUrls(next, max)) {
+    return { urls: next, ok: false };
+  }
 
   const emptyIndex = next.findIndex((url) => !String(url || '').trim());
   if (emptyIndex >= 0) {
@@ -42,12 +75,39 @@ export function appendUploadedMediaUrl(
     return { urls: next, ok: true };
   }
 
-  if (next.length < max) {
+  if (isUnlimitedMediaCount(max) || next.length < max) {
     next.push(trimmedUrl);
     return { urls: next, ok: true };
   }
 
   return { urls: next, ok: false };
+}
+
+export function appendMediaUrlsWithLimit(
+  currentUrls,
+  incomingUrls,
+  max = PLAYGROUND_MEDIA_MAX_COUNT,
+) {
+  let next = [...(currentUrls || [])];
+  let added = 0;
+  let skipped = 0;
+  for (const raw of incomingUrls || []) {
+    const url = String(raw || '').trim();
+    if (!url) {
+      continue;
+    }
+    const result = appendUploadedMediaUrl(next, url, max);
+    if (!result.ok) {
+      skipped += 1;
+      continue;
+    }
+    next = result.urls;
+    added += 1;
+  }
+  if (next.length === 0) {
+    next = [''];
+  }
+  return { urls: next, added, skipped };
 }
 
 export async function uploadPlaygroundMediaFile(file) {

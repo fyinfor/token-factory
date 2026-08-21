@@ -21,8 +21,10 @@ import { showError, formatMessageForAPI, isValidMessage } from './utils';
 import { collectPlaygroundImageMediaUrls } from './playgroundImageUtils';
 import {
   applyVideoFrameMetadata,
+  assertExclusiveVideoImagePayload,
   buildVideoNativeInput,
   collectVideoMediaUrls,
+  resolvePlaygroundVideoImages,
 } from './playgroundVideoUtils';
 import {
   buildPlaygroundVideoResolutionOptions,
@@ -30,7 +32,10 @@ import {
   parsePlaygroundCustomImageSize,
   resolvePlaygroundImageSize,
 } from './videoResolutionLabel';
-import { MESSAGE_ROLES } from '../constants/playground.constants';
+import {
+  MESSAGE_ROLES,
+  PLAYGROUND_VIDEO_IMAGE_TABS,
+} from '../constants/playground.constants';
 import { API, updateAPI } from './apiClient';
 
 export { API, updateAPI };
@@ -166,28 +171,37 @@ export const buildApiPayload = (
         : explicitVideoRatio || matchedRatio?.value || 'adaptive';
     const prompt = getLastUserPrompt();
     const generateAudio = inputs.generate_audio !== false;
-    const {
-      images: imageMediaUrls,
-      videos: videoMediaUrls,
-      audios: audioMediaUrls,
-    } = collectVideoMediaUrls(
-      inputs.imageUrls,
-      inputs.videoUrls,
-      processedMessages,
-      inputs.audioUrls,
-    );
-    let metadata = applyVideoFrameMetadata(
-      {
-        duration: videoDuration,
-        resolution,
-        ratio: metadataRatio,
-        generate_audio: generateAudio,
-        ...(videoMediaUrls.length > 0 ? { video_urls: videoMediaUrls } : {}),
-        ...(audioMediaUrls.length > 0 ? { audio_urls: audioMediaUrls } : {}),
-      },
-      imageMediaUrls,
-    );
-    if (prompt || imageMediaUrls.length > 0 || videoMediaUrls.length > 0) {
+    const resolvedImages = resolvePlaygroundVideoImages(inputs);
+    const activeImageUrls =
+      resolvedImages.mode === PLAYGROUND_VIDEO_IMAGE_TABS.FRAMES
+        ? inputs.frameImageUrls
+        : inputs.imageUrls;
+    const { videos: videoMediaUrls, audios: audioMediaUrls } =
+      collectVideoMediaUrls(
+        activeImageUrls,
+        inputs.videoUrls,
+        processedMessages,
+        inputs.audioUrls,
+      );
+    const imageMediaUrls = resolvedImages.images;
+    const frameImageUrls = resolvedImages.frameImages;
+    let metadata = {
+      duration: videoDuration,
+      resolution,
+      ratio: metadataRatio,
+      generate_audio: generateAudio,
+      ...(videoMediaUrls.length > 0 ? { video_urls: videoMediaUrls } : {}),
+      ...(audioMediaUrls.length > 0 ? { audio_urls: audioMediaUrls } : {}),
+    };
+    if (resolvedImages.mode === PLAYGROUND_VIDEO_IMAGE_TABS.FRAMES) {
+      metadata = applyVideoFrameMetadata(metadata, frameImageUrls);
+    }
+    if (
+      prompt ||
+      imageMediaUrls.length > 0 ||
+      frameImageUrls.length > 0 ||
+      videoMediaUrls.length > 0
+    ) {
       metadata = {
         ...metadata,
         input: buildVideoNativeInput(prompt),
@@ -204,6 +218,14 @@ export const buildApiPayload = (
       negative_prompt: '',
       seed: null,
       images: imageMediaUrls,
+      ...(resolvedImages.mode === PLAYGROUND_VIDEO_IMAGE_TABS.FRAMES &&
+      frameImageUrls[0]
+        ? { first_frame_url: frameImageUrls[0] }
+        : {}),
+      ...(resolvedImages.mode === PLAYGROUND_VIDEO_IMAGE_TABS.FRAMES &&
+      frameImageUrls[1]
+        ? { last_frame_url: frameImageUrls[1] }
+        : {}),
       ...(imageMediaUrls.length > 0
         ? {}
         : videoMediaUrls.length > 0
@@ -212,6 +234,19 @@ export const buildApiPayload = (
       metadata,
       __endpoint: 'video',
     };
+    const exclusive = assertExclusiveVideoImagePayload(payload);
+    if (!exclusive.ok) {
+      if (resolvedImages.mode === PLAYGROUND_VIDEO_IMAGE_TABS.FRAMES) {
+        payload.images = [];
+      } else {
+        delete payload.first_frame_url;
+        delete payload.last_frame_url;
+        if (payload.metadata) {
+          delete payload.metadata.first_frame_url;
+          delete payload.metadata.last_frame_url;
+        }
+      }
+    }
     return payload;
   }
   if (isImageMode) {

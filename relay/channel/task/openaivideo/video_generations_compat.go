@@ -56,6 +56,7 @@ func extractVideoGenerationsCompatFields(respBody []byte) (videoGenerationsCompa
 	if err := common.Unmarshal(respBody, &root); err != nil || root == nil {
 		return empty, false
 	}
+	dto.LiftVideoPollResultSummary(root)
 	if isVideoGenerationsFormat2(root) {
 		return extractFormat2Fields(root), true
 	}

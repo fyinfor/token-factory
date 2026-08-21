@@ -287,6 +287,7 @@ func SetApiRouter(router *gin.Engine) {
 				// 用户智能路由策略（本地 route_* 表）
 				selfRoute.GET("/route-policy", controller.UserGetRoutePolicy)
 				selfRoute.PUT("/route-policy/mode", controller.UserUpdateRouteMode)
+				selfRoute.PUT("/route-policy/group-route", controller.UserUpdateGroupRoute)
 				selfRoute.POST("/route-policy/weights", controller.UserUpsertRouteWeight)
 				selfRoute.DELETE("/route-policy/weights/:id", controller.UserDeleteRouteWeight)
 				selfRoute.POST("/route-policy/overrides", controller.UserUpsertRouteOverride)
@@ -465,6 +466,27 @@ func SetApiRouter(router *gin.Engine) {
 			userModelPricingRoute.POST("/convert_channel_list", controller.ConvertUserModelPricingToChannelList)
 			userModelPricingRoute.DELETE("/by_user/:user_id", controller.DeleteUserModelPricingByUser)
 			userModelPricingRoute.DELETE("/:id", controller.DeleteUserModelPricing)
+		}
+
+		// 管理员：全局路由模板 + 指定用户路由策略
+		adminRoutePolicy := apiRouter.Group("/admin/route-policy")
+		adminRoutePolicy.Use(middleware.AdminAuth())
+		{
+			adminRoutePolicy.GET("/config", controller.AdminGetRouteConfig)
+			adminRoutePolicy.PUT("/config", controller.AdminUpdateRouteConfig)
+			adminRoutePolicy.GET("/template", controller.AdminGetRoutePolicyTemplate)
+			adminRoutePolicy.POST("/template/weights", controller.AdminUpsertTemplateWeight)
+			adminRoutePolicy.DELETE("/template/weights/:id", controller.AdminDeleteTemplateWeight)
+			adminRoutePolicy.POST("/template/overrides", controller.AdminUpsertTemplateOverride)
+			adminRoutePolicy.DELETE("/template/overrides/:id", controller.AdminDeleteTemplateOverride)
+
+			adminRoutePolicy.GET("/users/:id", controller.AdminGetUserRoutePolicy)
+			adminRoutePolicy.PUT("/users/:id/mode", controller.AdminUpdateUserRouteMode)
+			adminRoutePolicy.PUT("/users/:id/group-route", controller.AdminUpdateUserGroupRoute)
+			adminRoutePolicy.POST("/users/:id/weights", controller.AdminUpsertUserRouteWeight)
+			adminRoutePolicy.DELETE("/users/:id/weights/:wid", controller.AdminDeleteUserRouteWeight)
+			adminRoutePolicy.POST("/users/:id/overrides", controller.AdminUpsertUserRouteOverride)
+			adminRoutePolicy.DELETE("/users/:id/overrides/:oid", controller.AdminDeleteUserRouteOverride)
 		}
 
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")

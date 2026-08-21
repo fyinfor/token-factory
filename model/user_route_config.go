@@ -180,3 +180,87 @@ func UpsertUserModelGroupOverride(userID int, rawModel string, groupKey string) 
 func DeleteUserModelGroupOverrideByID(id uint, userID int) error {
 	return DB.Where("id = ? AND user_id = ?", id, userID).Delete(&UserModelGroupOverride{}).Error
 }
+
+// UserModelGroupRouteDisable 用户对某归类关闭智能路由。(user_id, group_key) 唯一。
+// 存在记录且 Disabled=true 时，该归类下模型按「关闭路由」选路（渠道 ID 顺序）。
+type UserModelGroupRouteDisable struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UserID    int       `gorm:"uniqueIndex:idx_user_group_route_disable;not null" json:"user_id"`
+	GroupKey  string    `gorm:"uniqueIndex:idx_user_group_route_disable;size:256;not null" json:"group_key"`
+	Disabled  bool      `gorm:"default:true" json:"disabled"`
+}
+
+// LoadUserModelGroupRouteDisabledMap 返回用户已关闭智能路由的归类集合（group_key → true）。
+func LoadUserModelGroupRouteDisabledMap(userID int) (map[string]bool, error) {
+	out := make(map[string]bool)
+	if userID <= 0 {
+		return out, nil
+	}
+	var rows []UserModelGroupRouteDisable
+	if err := DB.Where("user_id = ? AND disabled = ?", userID, true).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		key := strings.TrimSpace(r.GroupKey)
+		if key != "" {
+			out[key] = true
+		}
+	}
+	return out, nil
+}
+
+// IsUserModelGroupRouteDisabled 判断用户是否对该归类关闭了智能路由。
+func IsUserModelGroupRouteDisabled(userID int, groupKey string) bool {
+	return IsUserModelRouteDisabled(userID, "", groupKey)
+}
+
+// IsUserModelRouteDisabled 按归类 key、原始模型名、归一化模型名匹配关闭开关。
+func IsUserModelRouteDisabled(userID int, modelName, groupKey string) bool {
+	if userID <= 0 {
+		return false
+	}
+	disabled, err := LoadUserModelGroupRouteDisabledMap(userID)
+	if err != nil || len(disabled) == 0 {
+		return false
+	}
+	keys := []string{
+		strings.TrimSpace(groupKey),
+		strings.ToLower(strings.TrimSpace(modelName)),
+		NormalizeModelName(modelName),
+	}
+	seen := map[string]bool{}
+	for _, key := range keys {
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		if disabled[key] {
+			return true
+		}
+	}
+	return false
+}
+
+// SetUserModelGroupRouteDisabled 设置用户对某归类是否关闭智能路由。
+// disabled=false 时删除记录（恢复跟随全局路由模式）。
+func SetUserModelGroupRouteDisabled(userID int, groupKey string, disabled bool) error {
+	groupKey = strings.TrimSpace(groupKey)
+	if userID <= 0 || groupKey == "" {
+		return fmt.Errorf("user_id and group_key required")
+	}
+	if !disabled {
+		return DB.Where("user_id = ? AND group_key = ?", userID, groupKey).Delete(&UserModelGroupRouteDisable{}).Error
+	}
+	var existing UserModelGroupRouteDisable
+	result := DB.Where("user_id = ? AND group_key = ?", userID, groupKey).First(&existing)
+	if result.RowsAffected == 0 {
+		return DB.Create(&UserModelGroupRouteDisable{
+			UserID:   userID,
+			GroupKey: groupKey,
+			Disabled: true,
+		}).Error
+	}
+	return DB.Model(&existing).Update("disabled", true).Error
+}

@@ -83,6 +83,26 @@ func TestVideoMetadataFromTaskCompletion_SeedancePayload(t *testing.T) {
 	require.Equal(t, 480, meta.Height)
 }
 
+func TestVideoMetadataFromTaskCompletion_SeedanceResultSummary(t *testing.T) {
+	raw := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"status": "succeeded",
+		"model": "doubao-seedance-2-5-260628",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4"},
+			"duration": "4",
+			"resolution": "480p",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	task := &model.Task{Data: raw}
+	meta, ok := videoMetadataFromTaskCompletion(task, nil)
+	require.True(t, ok)
+	require.InDelta(t, 4, meta.DurationSec, 1e-9)
+	require.Equal(t, 854, meta.Width)
+	require.Equal(t, 480, meta.Height)
+}
+
 func TestVideoDimensionsFromTaskCompletion_TaskResultOnly(t *testing.T) {
 	task := &model.Task{}
 	taskResult := &relaycommon.TaskInfo{

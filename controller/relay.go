@@ -171,6 +171,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	// JD 采K3测试技术对接 - kimi‑k3专属特殊适配
+	if helper.AbortIfKimiK3EmptyUser(c, request) {
+		return
+	}
+
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		tokenFactoryError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
@@ -431,10 +436,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			}
 		}
 	}
-	// playground specific_channel_id / 硬指定渠道路由（{alias}/{model}/cN）：仅允许首轮命中已选渠道，
-	// 禁止在重试阶段切换到 smart-route 或随机候选池。
-	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换；
-	// 若带 X-TF-No-Failover 则同样禁止切换。
+	// playground specific_channel_id / 硬指定渠道路由（{alias}/{model}/cN）/
+	// 以及路由关闭时的 {model}/{route_slug}：仅允许首轮命中已选渠道。
+	// 智能路由开启时的 route_slug 偏好走有序候选保底，不在此拦截。
 	if retryParam.GetRetry() > 0 {
 		if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 			return nil, types.NewError(
@@ -477,40 +481,15 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		)
 	}
 	// 命中「指定供应商 + 任意渠道」时，候选池已限定；order 列表耗尽意味着供应商内无更多可用渠道，
-	// 不应回落到全局的 CacheGetRandomSatisfiedChannel（那会跨供应商），直接结束重试。
+	// 直接结束重试，不再回落到其他选路策略。
 	if _, forced := service.ForcedSupplierFromContext(c); forced {
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 在指定供应商内已无可用渠道（retry）", retryParam.TokenGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
-
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-
-	if err != nil {
-		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-	}
-	if channel == nil {
-		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-	}
-
-	// 用户指定价：重试随机兜底选中的渠道也不允许超出用户价格上限。
-	if !service.ChannelWithinUserPriceCap(c.GetInt("id"), info.OriginModelName, channel) {
-		return nil, types.NewError(
-			fmt.Errorf("分组 %s 下模型 %s 已无满足用户指定价上限的可用渠道（retry）", selectGroup, info.OriginModelName),
-			types.ErrorCodeGetChannelFailed,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
-
-	tokenFactoryError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
-	if tokenFactoryError != nil {
-		return nil, tokenFactoryError
-	}
-	if retryParam.GetRetry() > 0 {
-		if tfErr := middleware.ChannelModelRateLimitError(channel, info.OriginModelName); tfErr != nil {
-			return nil, tfErr
-		}
-	}
-	return channel, nil
+	return nil, types.NewError(
+		fmt.Errorf("分组 %s 下模型 %s 的路由候选已用尽（retry）", retryParam.TokenGroup, info.OriginModelName),
+		types.ErrorCodeGetChannelFailed,
+		types.ErrOptionWithSkipRetry(),
+	)
 }
 
 func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes int) bool {
@@ -520,8 +499,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
-	// 明确指定渠道（playground specific_channel_id / {alias}/{model}/cN 硬指定）时，不允许重试切换渠道。
-	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截；X-TF-No-Failover 显式关闭切换。
+	// 明确指定渠道（playground specific_channel_id / {alias}/{model}/cN /
+	// 路由关闭时的 {model}/{route_slug}）时，不允许重试切换渠道。
+	// 智能路由开启时的 route_slug 偏好允许有序候选保底；X-TF-No-Failover 显式关闭切换。
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
@@ -810,6 +790,9 @@ func RelayTask(c *gin.Context) {
 		}
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
 		task.PrivateData.TfOpenVideoUpstreamStyle = relayInfo.TfOpenVideoUpstreamStyle
+		if relayInfo.ChannelType == constant.ChannelTypeSeedance || relayInfo.ChannelType == constant.ChannelTypeDoubaoVideo {
+			task.PrivateData.SeedanceFetchAPI = relayInfo.ChannelOtherSettings.SeedanceFetchAPI
+		}
 		if k := strings.TrimSpace(relayInfo.ApiKey); k != "" {
 			// 轮询上游（如腾讯云 DescribeTaskDetail）时使用与提交相同的密钥，避免多 Key 渠道错钥
 			task.PrivateData.Key = k

@@ -18,11 +18,12 @@ type LocalUserRoutePolicy struct {
 
 // LocalUserModelGroup 用户视图中的模型分组。
 type LocalUserModelGroup struct {
-	GroupKey     string
-	DisplayName  string
-	Models       []string
-	ChannelCount int
-	Channels     []LocalUserGroupChannel
+	GroupKey      string
+	DisplayName   string
+	Models        []string
+	ChannelCount  int
+	Channels      []LocalUserGroupChannel
+	RouteDisabled bool // 用户对该归类关闭智能路由
 }
 
 // LocalUserGroupChannel 用户视图中的渠道信息。
@@ -73,6 +74,8 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 		}
 		userWeightMap[w.GroupKey][w.ChannelID] = w
 	}
+
+	routeDisabledMap, _ := model.LoadUserModelGroupRouteDisabledMap(userID)
 
 	globalWeights, _ := model.LoadAllModelGroupWeights()
 	globalWeightMap := make(map[string]map[int]model.ModelGroupWeight)
@@ -219,11 +222,12 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 			display = sanitizeUTF8(key)
 		}
 		groups = append(groups, LocalUserModelGroup{
-			GroupKey:     sanitizeUTF8(key),
-			DisplayName:  display,
-			Models:       rawModels,
-			ChannelCount: len(chans),
-			Channels:     chans,
+			GroupKey:      sanitizeUTF8(key),
+			DisplayName:   display,
+			Models:        rawModels,
+			ChannelCount:  len(chans),
+			Channels:      chans,
+			RouteDisabled: routeDisabledMap[key],
 		})
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].GroupKey < groups[j].GroupKey })

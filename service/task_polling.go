@@ -410,6 +410,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		"action":                       task.Action,
 		"channel_type":                 ch.Type,
 		"tf_open_video_upstream_style": task.PrivateData.TfOpenVideoUpstreamStyle,
+		"seedance_fetch_api":           dto.ResolveSeedanceFetchAPI(task.PrivateData.SeedanceFetchAPI, ch.GetOtherSettings().SeedanceFetchAPI),
 	}, proxy)
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)

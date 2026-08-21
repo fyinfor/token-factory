@@ -38,8 +38,6 @@ func CollectSameModelRouteCandidatesWithFilter(group, modelName string, filter f
 		candidates = append(candidates, RouteChannelCandidate{
 			ChannelID:    ch.Id,
 			ChannelName:  ch.Name,
-			Priority:     int(ch.GetPriority()),
-			Weight:       ch.GetWeight(),
 			Status:       ch.Status,
 			ProviderSlug: strings.ToLower(strings.TrimSpace(ch.SupplierType)),
 			Price:        ResolveChannelModelUnitPrice(ch, modelName),
@@ -123,19 +121,14 @@ func BuildPreferredChannelFailoverOrderWithFilter(c *gin.Context, modelName, gro
 	if !res.Fallback && len(res.OrderedChannelIDs) > 0 {
 		ordered = res.OrderedChannelIDs
 	} else if UserPricingUsesManualChannelPriority(userID, modelName) {
-		// 智能路由未启用时，channel_list 保底按手动 priority。
 		sorted := SortRouteCandidatesByUserPricingPriority(userID, modelName, candidates)
 		ordered = make([]int, 0, len(sorted))
 		for _, cand := range sorted {
 			ordered = append(ordered, cand.ChannelID)
 		}
 	} else {
-		// 未启用 weight/price 时仍按价格升序保底，与系统默认价格优先对齐。
-		sorted := sortRouteCandidatesByPrice(candidates)
-		ordered = make([]int, 0, len(sorted))
-		for _, cand := range sorted {
-			ordered = append(ordered, cand.ChannelID)
-		}
+		mode := ResolveEffectiveRouteMode(userID)
+		ordered, _ = OrderRouteChannelIDs(c, userID, modelName, res.GroupKey, mode, candidates, "")
 	}
 	return PreferChannelFirst(ordered, preferredID)
 }

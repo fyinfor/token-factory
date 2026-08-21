@@ -206,6 +206,26 @@ func extractVideoGenerationsCompatTokens(taskData []byte) int {
 			}
 		}
 	}
+	if summary, _ := root["resultSummary"].(map[string]any); summary != nil {
+		if usage, _ := summary["usage"].(map[string]any); usage != nil {
+			if n := submitToInt(usage["total_tokens"]); n > 0 {
+				return n
+			}
+			if n := submitToInt(usage["completion_tokens"]); n > 0 {
+				return n
+			}
+		}
+	}
+	if summary, _ := root["result_summary"].(map[string]any); summary != nil {
+		if usage, _ := summary["usage"].(map[string]any); usage != nil {
+			if n := submitToInt(usage["total_tokens"]); n > 0 {
+				return n
+			}
+			if n := submitToInt(usage["completion_tokens"]); n > 0 {
+				return n
+			}
+		}
+	}
 	if usage, _ := root["usage"].(map[string]any); usage != nil {
 		if n := submitToInt(usage["total_tokens"]); n > 0 {
 			return n

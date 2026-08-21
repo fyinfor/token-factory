@@ -44,9 +44,15 @@ import {
   MESSAGE_ROLES,
   ERROR_MESSAGES,
   getDefaultMessages,
-  PLAYGROUND_MEDIA_MAX_COUNT,
 } from '../../constants/playground.constants';
 import { appendUploadedMediaUrl } from '../../helpers/playgroundMediaInputUtils';
+import {
+  assertExclusiveVideoImagePayload,
+  getPlaygroundSidebarImageField,
+  getPlaygroundSidebarImageMaxCount,
+  getPlaygroundSidebarImageUrls,
+  validatePlaygroundVideoImageParams,
+} from '../../helpers/playgroundVideoUtils';
 import {
   getLogo,
   stringToColor,
@@ -602,9 +608,9 @@ const Playground = () => {
             // 文本 / 图片 / 视频：媒体侧栏图片需并入用户消息（视频请求体仍由 buildApiPayload 单独组装）
             const allowMedia =
               mode === 'text' || mode === 'image' || mode === 'video';
-            if (allowMedia && inputs.imageUrls) {
-              const validImageUrls = inputs.imageUrls.filter(
-                (url) => url.trim() !== '',
+            if (allowMedia) {
+              const validImageUrls = getPlaygroundSidebarImageUrls(inputs).filter(
+                (url) => String(url || '').trim() !== '',
               );
               if (validImageUrls.length > 0) {
                 const textContent = getTextContent(messages[i]) || '示例消息';
@@ -678,8 +684,17 @@ const Playground = () => {
       // 文本 / 图片 / 视频：发送前将媒体侧栏图片拼入用户消息多模态 content
       const allowMedia =
         mode === 'text' || mode === 'image' || mode === 'video';
+      if (mode === 'video') {
+        const imageCheck = validatePlaygroundVideoImageParams(inputs);
+        if (!imageCheck.ok) {
+          Toast.error(t(imageCheck.message));
+          return;
+        }
+      }
       const validImageUrls = allowMedia
-        ? inputs.imageUrls.filter((url) => url.trim() !== '')
+        ? getPlaygroundSidebarImageUrls(inputs).filter(
+            (url) => String(url || '').trim() !== '',
+          )
         : [];
       const messageContent = buildMessageContent(
         content,
@@ -695,6 +710,13 @@ const Playground = () => {
         inputs,
         parameterEnabled,
       );
+      if (mode === 'video') {
+        const exclusive = assertExclusiveVideoImagePayload(payload);
+        if (!exclusive.ok) {
+          Toast.error(t(exclusive.message));
+          return;
+        }
+      }
       const loadingMessage = createLoadingAssistantMessage({
         generationMeta: buildPlaygroundGenerationMeta(inputs),
       });
@@ -718,6 +740,7 @@ const Playground = () => {
       sendRequest,
       saveMessagesForMode,
       setMessage,
+      t,
     ],
   );
 
@@ -916,29 +939,35 @@ const Playground = () => {
       if (mode !== 'image' && mode !== 'video') {
         return;
       }
+      const field = getPlaygroundSidebarImageField(inputs);
+      const maxCount = getPlaygroundSidebarImageMaxCount(inputs);
+      const currentUrls = getPlaygroundSidebarImageUrls(inputs);
       const { urls, ok } = appendUploadedMediaUrl(
-        inputs.imageUrls,
+        currentUrls,
         base64Data,
-        PLAYGROUND_MEDIA_MAX_COUNT,
+        maxCount,
       );
       if (!ok) {
         Toast.warning({
-          content: t('操练场素材已达上限', '最多添加 {{count}} 个', {
-            count: PLAYGROUND_MEDIA_MAX_COUNT,
-          }),
+          content:
+            field === 'frameImageUrls'
+              ? t('首尾帧最多只能填写 2 张图片')
+              : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                  count: maxCount,
+                }),
           duration: 3,
         });
         return;
       }
-      handleInputChange('imageUrls', urls);
+      handleInputChange(field, urls);
     },
-    [inputs.display_mode, inputs.imageUrls, handleInputChange, t],
+    [handleInputChange, inputs, t],
   );
 
   // Playground Context 值
   const playgroundContextValue = {
     onPasteImage: handlePasteImage,
-    imageUrls: inputs.imageUrls || [],
+    imageUrls: getPlaygroundSidebarImageUrls(inputs),
     imageEnabled: ['image', 'video'].includes(inputs.display_mode || 'text'),
   };
 

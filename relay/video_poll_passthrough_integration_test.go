@@ -93,6 +93,39 @@ func TestVideoPollPassthrough_OpenAIVideoConvert(t *testing.T) {
 	require.Contains(t, string(out), `"ratio":"16:9"`)
 }
 
+func TestBuildOpenAIVideoPollResponse_SeedanceResultSummaryShape(t *testing.T) {
+	upstream := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"upstreamTaskId": "cgt-20260821150113-fh2fm",
+		"status": "succeeded",
+		"model": "doubao-seedance-2-5-260628",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4"},
+			"duration": "4",
+			"resolution": "480p",
+			"upstreamStatus": "succeeded",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	task := &model.Task{
+		TaskID:     "local_task",
+		Platform:   constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeSeedance)),
+		Data:       upstream,
+		Status:     model.TaskStatusSuccess,
+		Progress:   "100%",
+		SubmitTime: 1700000000,
+		FinishTime: 1700000100,
+		Properties: model.Properties{OriginModelName: "doubao-seedance-2-5-260628"},
+	}
+	out := buildOpenAIVideoPollResponse(task, upstream, "/v1/video/generations/local_task")
+	require.NotEmpty(t, out)
+	s := string(out)
+	require.Contains(t, s, `"resolution":"480p"`)
+	require.Contains(t, s, `"duration":4`)
+	require.Contains(t, s, `"usage":`)
+	require.Contains(t, s, `"video_url":"https://example.com/seedance.mp4"`)
+}
+
 func TestVideoPollPassthrough_EmptyTaskData(t *testing.T) {
 	task := &model.Task{TaskID: "local_task", Data: nil}
 	raw, err := (&taskopenaivideo.TaskAdaptor{}).ConvertToOpenAIVideo(task)

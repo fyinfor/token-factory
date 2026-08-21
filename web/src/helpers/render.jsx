@@ -180,6 +180,7 @@ export function getLucideIcon(key, selected = false) {
     case 'personal':
       return <User {...commonProps} color={iconColor} />;
     case 'route_policy':
+    case 'admin_route_policy':
       return <Route {...commonProps} color={iconColor} />;
     case 'seedance-material':
       return <ImageIcon {...commonProps} color={iconColor} />;

@@ -92,6 +92,13 @@ export const CONSOLE_SEARCH_ITEMS = [
     ['路由策略', '权重', '模型路由'],
   ),
   consoleSearchItem(
+    'admin-route-policy',
+    '全局路由',
+    '/console/admin/route-policy',
+    '管理员',
+    ['路由模板', '用户路由', '智能路由'],
+  ),
+  consoleSearchItem(
     'seedance-material',
     'SD 素材库',
     '/console/seedance/material',

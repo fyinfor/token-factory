@@ -192,11 +192,11 @@ type ModelRouteResult struct {
 //
 // 解析规则：
 //   - 字符串中至少包含一个 "/"；
-//   - 最后一段须为合法 route_slug（见 model.IsValidRouteSlug），且不能为旧 channel_no 形态 c\d+；
-//   - 命中条件（满足其一即剥后缀）：
+//   - 最后一段须为路由后缀候选：合法 route_slug，或旧 channel_no 形态 c\d+（误用时仍剥后缀）；
+//   - 命中条件（满足其一即视为指定渠道路由）：
 //     1) 存在该 route_slug 的渠道（含已禁用）；或
-//     2) 后缀形态合法且基础模型名在系统中有启用能力（渠道已删除/拼写错误时的可用性保底）；
-//   - 当对应渠道启用且 models 包含该模型时 ChannelID>0（偏好首跳）；否则 ChannelID=0，走同模型智能路由。
+//     2) 后缀形态合法/为 cN 且基础模型名在系统中有启用能力；
+//   - 当对应渠道启用且 models 包含该模型时 ChannelID>0；否则 ChannelID=0，由调用方按路由开关决定回落或拒绝。
 func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 	name := strings.TrimSpace(raw)
 	if name == "" || !strings.Contains(name, "/") {
@@ -208,7 +208,7 @@ func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 	if potentialSlug == "" || potentialModel == "" {
 		return nil, false, nil
 	}
-	if !model.IsValidRouteSlug(potentialSlug) {
+	if !model.IsRouteSuffixCandidate(potentialSlug) {
 		return nil, false, nil
 	}
 
@@ -228,8 +228,7 @@ func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 	return result, true, nil
 }
 
-// ApplyModelRouteOnRequestBody 写入「偏好渠道」上下文（若有）并把真实模型名写回请求体。
-// ChannelID==0 时仅剥后缀，不绑定偏好渠道，后续走同模型智能路由。
+// ApplyModelRouteOnRequestBody 写入「指定渠道」上下文并把真实模型名写回请求体。
 func ApplyModelRouteOnRequestBody(c *gin.Context, result *ModelRouteResult, originalModel string) error {
 	if result.ChannelID > 0 {
 		common.SetContextKey(c, constant.ContextKeyPreferredChannelID, result.ChannelID)

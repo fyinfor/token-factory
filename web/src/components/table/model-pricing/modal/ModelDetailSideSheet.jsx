@@ -38,7 +38,7 @@ const { Text } = Typography;
 
 const ModelDetailContentSkeleton = () => (
   <div
-    className='model-channel-workspace grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[230px_minmax(0,1fr)] md:grid-rows-1'
+    className='model-channel-workspace grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[280px_minmax(0,1fr)] md:grid-rows-1'
     aria-hidden='true'
   >
     <aside className='channel-selector-pane max-h-64 min-h-0 border-b p-3 md:h-full md:max-h-none md:border-b-0 md:border-r'>
@@ -211,7 +211,7 @@ const ModelDetailSideSheet = ({
         overflow: 'hidden',
       }}
       visible={visible}
-      width={isMobile ? '100%' : 800}
+      width={isMobile ? '100%' : 850}
       closeIcon={
         <Button
           className='semi-button-tertiary semi-button-size-small semi-button-borderless'

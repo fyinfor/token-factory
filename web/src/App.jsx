@@ -75,6 +75,7 @@ const InvoicePage = lazy(() => import('./pages/Invoice'));
 const InvoiceAdminPage = lazy(() => import('./pages/InvoiceAdmin'));
 const SettlementExportPage = lazy(() => import('./pages/SettlementExport'));
 const RoutePolicyPage = lazy(() => import('./pages/RoutePolicy'));
+const AdminRoutePolicyPage = lazy(() => import('./pages/AdminRoutePolicy'));
 const SupplierApplyPage = lazy(() => import('./pages/Supplier/Apply'));
 const SupplierChannelPage = lazy(() => import('./pages/Supplier/Channel'));
 const PricingSettingsPage = lazy(
@@ -417,6 +418,19 @@ function App() {
               <PrivateRoute>
                 <RoutePolicyPage />
               </PrivateRoute>
+            }
+          />
+          <Route
+            path='/console/admin/route-policy'
+            element={
+              <AdminRoute>
+                <Suspense
+                  fallback={<Loading></Loading>}
+                  key={location.pathname}
+                >
+                  <AdminRoutePolicyPage />
+                </Suspense>
+              </AdminRoute>
             }
           />
           <Route
