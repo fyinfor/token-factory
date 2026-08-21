@@ -4,14 +4,16 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 )
 
 // extractVolcEngineVideoMetadata parses VolcEngine / Seedance contents-generations task payloads
-// (top-level id, status, duration, resolution, content.video_url).
+// (top-level id, status, duration, resolution, content.video_url, or resultSummary 嵌套形态).
 func extractVolcEngineVideoMetadata(payload map[string]any) (*VideoMetadata, bool) {
 	if len(payload) == 0 {
 		return nil, false
 	}
+	dto.LiftVideoPollResultSummary(payload)
 	// DashScope / Tencent shapes are handled elsewhere.
 	if dashScopeOutput(payload) != nil {
 		return nil, false

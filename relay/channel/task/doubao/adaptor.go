@@ -433,7 +433,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 	resTask := responseTask{}
-	if err := common.Unmarshal(respBody, &resTask); err != nil {
+	if err := common.Unmarshal(dto.LiftVideoPollResultSummaryJSON(respBody), &resTask); err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")
 	}
 
@@ -481,7 +481,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	var dResp responseTask
-	if err := common.Unmarshal(originTask.Data, &dResp); err != nil {
+	if err := common.Unmarshal(dto.LiftVideoPollResultSummaryJSON(originTask.Data), &dResp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal doubao task data failed")
 	}
 

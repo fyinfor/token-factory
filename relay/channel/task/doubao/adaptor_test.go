@@ -295,3 +295,65 @@ func TestConvertToOpenAIVideo_IncludesLastFrameURLInMetadata(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "https://res.mp4", output["video_url"])
 }
+
+func TestParseTaskResult_ResultSummaryNestedVideoURL(t *testing.T) {
+	a := &TaskAdaptor{}
+	body := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"upstreamTaskId": "cgt-20260821150113-fh2fm",
+		"status": "succeeded",
+		"model": "doubao-seedance-2-5-260628",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4"},
+			"duration": "4",
+			"resolution": "480p",
+			"upstreamStatus": "succeeded",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	ti, err := a.ParseTaskResult(body)
+	require.NoError(t, err)
+	require.NotNil(t, ti)
+	assert.Equal(t, string(model.TaskStatusSuccess), ti.Status)
+	assert.Equal(t, "100%", ti.Progress)
+	assert.Equal(t, "https://example.com/seedance.mp4", ti.Url)
+	assert.Equal(t, 4, ti.Duration)
+	assert.Equal(t, "480p", ti.Resolution)
+	assert.Equal(t, 38830, ti.CompletionTokens)
+	assert.Equal(t, 38830, ti.TotalTokens)
+}
+
+func TestConvertToOpenAIVideo_ResultSummaryNestedVideoURL(t *testing.T) {
+	a := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:   "local_task",
+		Status:   model.TaskStatusSuccess,
+		Progress: "100%",
+		Data: []byte(`{
+			"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+			"upstreamTaskId": "cgt-20260821150113-fh2fm",
+			"status": "succeeded",
+			"model": "doubao-seedance-2-5-260628",
+			"resultSummary": {
+				"content": {"video_url": "https://example.com/seedance.mp4", "last_frame_url": "https://example.com/last.jpg"},
+				"duration": "4",
+				"resolution": "480p",
+				"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+			}
+		}`),
+		Properties: model.Properties{OriginModelName: "doubao-seedance-2-5-260628"},
+	}
+	out, err := a.ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(out, &got))
+	output, ok := got["output"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://example.com/seedance.mp4", output["video_url"])
+	meta, ok := got["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://example.com/last.jpg", meta["last_frame_url"])
+	usage, ok := got["usage"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(38830), usage["total_tokens"])
+}

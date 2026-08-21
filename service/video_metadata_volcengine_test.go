@@ -37,6 +37,36 @@ func TestExtractVolcEngineVideoMetadata_SeedanceSuccess(t *testing.T) {
 	}
 }
 
+func TestExtractVolcEngineVideoMetadata_ResultSummary(t *testing.T) {
+	raw := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"upstreamTaskId": "cgt-20260821150113-fh2fm",
+		"status": "succeeded",
+		"model": "doubao-seedance-2-5-260628",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4"},
+			"duration": "4",
+			"resolution": "480p",
+			"upstreamStatus": "succeeded",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	var payload map[string]any
+	if err := common.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	meta, ok := extractVolcEngineVideoMetadata(payload)
+	if !ok {
+		t.Fatal("expected volcengine metadata from resultSummary")
+	}
+	if meta.DurationSec != 4 {
+		t.Fatalf("duration=%v", meta.DurationSec)
+	}
+	if meta.Width != 854 || meta.Height != 480 {
+		t.Fatalf("resolution=%dx%d", meta.Width, meta.Height)
+	}
+}
+
 func TestExtractVolcEngineVideoMetadata_ResolutionBeforeSize(t *testing.T) {
 	payload := map[string]any{
 		"id":         "task_abc",

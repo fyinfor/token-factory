@@ -128,6 +128,51 @@ func TestMergeVideoPollPassthroughFields_IncludesContentLastFrameURL(t *testing.
 	require.Equal(t, "https://res-last.jpg", content["last_frame_url"])
 }
 
+func TestExtractVideoPollPassthroughFields_ResultSummary(t *testing.T) {
+	upstream := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"upstreamTaskId": "cgt-20260821150113-fh2fm",
+		"status": "succeeded",
+		"model": "doubao-seedance-2-5-260628",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4"},
+			"duration": "4",
+			"resolution": "480p",
+			"upstreamStatus": "succeeded",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	fields := ExtractVideoPollPassthroughFields(upstream)
+	require.Equal(t, "480p", fields["resolution"])
+	require.Equal(t, 4, fields["duration"])
+	require.NotNil(t, fields["usage"])
+	content, ok := fields["content"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "https://example.com/seedance.mp4", content["video_url"])
+}
+
+func TestParseVideoGenerationsPollUpstream_ResultSummary(t *testing.T) {
+	raw := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"status": "succeeded",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4", "last_frame_url": "https://example.com/last.jpg"},
+			"duration": "4",
+			"resolution": "480p",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	upstream := ParseVideoGenerationsPollUpstream(raw)
+	require.NotNil(t, upstream)
+	require.Equal(t, "480p", upstream.Resolution)
+	require.Equal(t, 4, upstream.Duration)
+	require.NotNil(t, upstream.Usage)
+	require.Equal(t, 38830, upstream.Usage.TotalTokens)
+	require.NotNil(t, upstream.Content)
+	require.Equal(t, "https://example.com/seedance.mp4", upstream.Content.VideoURL)
+	require.Equal(t, "https://example.com/last.jpg", upstream.Content.LastFrameURL)
+}
+
 func TestCorrectVideoPollTimestamps_MatchesTaskLogNotUpstream(t *testing.T) {
 	// 任务日志（UTC+8）：提交 16:47:48、结束 16:50:54；上游 created_at/updated_at 偏差约 20 分钟。
 	const (

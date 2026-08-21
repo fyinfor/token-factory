@@ -76,7 +76,6 @@ const VideoImageUrlInput = ({
         disabled={disabled}
         maxCount={PLAYGROUND_VIDEO_FRAME_MAX_COUNT}
         extraHeader={extraHeader}
-        hint={t('最多 2 张，分别作为首帧和尾帧；与参考图互斥，不能同时提交')}
         showCount={true}
         placeholder={(index) =>
           index === 0
@@ -95,7 +94,6 @@ const VideoImageUrlInput = ({
       disabled={disabled}
       maxCount={PLAYGROUND_MEDIA_UNLIMITED_COUNT}
       extraHeader={extraHeader}
-      hint={t('不限制数量；与首尾帧互斥，请勿在同一请求中同时提交')}
       showCount={true}
     />
   );

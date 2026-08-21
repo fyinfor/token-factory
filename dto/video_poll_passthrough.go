@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -23,7 +24,7 @@ func IsVideoGenerationsFetchPath(path string) bool {
 }
 
 // ExtractVideoPollPassthroughFields 从上游查询原始 JSON 中提取需透传的字段。
-// 依次扫描顶层、data、result 对象；字段存在即保留原值（含 0 / false / 空字符串）。
+// 依次扫描顶层、data、result、resultSummary 对象；字段存在即保留原值（含 0 / false / 空字符串）。
 func ExtractVideoPollPassthroughFields(upstreamJSON []byte) map[string]any {
 	if len(upstreamJSON) == 0 {
 		return nil
@@ -32,6 +33,7 @@ func ExtractVideoPollPassthroughFields(upstreamJSON []byte) map[string]any {
 	if err := common.Unmarshal(upstreamJSON, &root); err != nil {
 		return nil
 	}
+	LiftVideoPollResultSummary(root)
 	sources := videoPollPassthroughSources(root)
 	if len(sources) == 0 {
 		return nil
@@ -64,7 +66,144 @@ func videoPollPassthroughSources(root map[string]any) []map[string]any {
 	if result, ok := root["result"].(map[string]any); ok {
 		sources = append(sources, result)
 	}
+	if summary := videoPollResultSummaryMap(root); summary != nil {
+		sources = append(sources, summary)
+	}
 	return sources
+}
+
+// LiftVideoPollResultSummaryJSON 将 resultSummary / result_summary 中的成片字段提升到顶层后重新序列化。
+// 供渠道 ParseTaskResult / ConvertToOpenAIVideo 把聚合网关回包还原为 Seedance/Ark 标准形态。
+func LiftVideoPollResultSummaryJSON(raw []byte) []byte {
+	if len(raw) == 0 {
+		return raw
+	}
+	var root map[string]any
+	if err := common.Unmarshal(raw, &root); err != nil || root == nil {
+		return raw
+	}
+	LiftVideoPollResultSummary(root)
+	out, err := common.Marshal(root)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+// LiftVideoPollResultSummary 兼容火山方舟 Seedance 聚合查询回包：成片 URL / 时长 / 分辨率 / usage 放在 resultSummary 中。
+// 仅在顶层缺失时回填，并把字符串 duration（如 "4"）规范为数字。
+func LiftVideoPollResultSummary(root map[string]any) {
+	if root == nil {
+		return
+	}
+	summary := videoPollResultSummaryMap(root)
+	if summary != nil {
+		liftVideoPollContent(root, summary)
+		for _, key := range []string{"duration", "resolution", "ratio", "usage", "error", "seed", "framespersecond", "generate_audio", "draft", "extra"} {
+			if videoPollValueEmpty(root[key]) && !videoPollValueEmpty(summary[key]) {
+				root[key] = summary[key]
+			}
+		}
+		if videoPollValueEmpty(root["status"]) {
+			if st := firstNonEmptyVideoPollValue(summary["upstreamStatus"], summary["upstream_status"], summary["status"]); !videoPollValueEmpty(st) {
+				root["status"] = st
+			}
+		}
+	}
+	coerceVideoPollDuration(root)
+}
+
+func videoPollResultSummaryMap(root map[string]any) map[string]any {
+	if root == nil {
+		return nil
+	}
+	if summary, ok := root["resultSummary"].(map[string]any); ok && len(summary) > 0 {
+		return summary
+	}
+	if summary, ok := root["result_summary"].(map[string]any); ok && len(summary) > 0 {
+		return summary
+	}
+	return nil
+}
+
+func liftVideoPollContent(root, summary map[string]any) {
+	sumContent, _ := summary["content"].(map[string]any)
+	if len(sumContent) == 0 {
+		return
+	}
+	rootContent, _ := root["content"].(map[string]any)
+	if videoPollContentVideoURL(rootContent) == "" {
+		if rootContent == nil {
+			root["content"] = sumContent
+			return
+		}
+		for _, key := range []string{"video_url", "last_frame_url"} {
+			if videoPollValueEmpty(rootContent[key]) && !videoPollValueEmpty(sumContent[key]) {
+				rootContent[key] = sumContent[key]
+			}
+		}
+	}
+}
+
+func videoPollContentVideoURL(content map[string]any) string {
+	if content == nil {
+		return ""
+	}
+	if u, _ := content["video_url"].(string); strings.TrimSpace(u) != "" {
+		return strings.TrimSpace(u)
+	}
+	if u, _ := content["url"].(string); strings.TrimSpace(u) != "" {
+		return strings.TrimSpace(u)
+	}
+	return ""
+}
+
+func coerceVideoPollDuration(root map[string]any) {
+	if root == nil {
+		return
+	}
+	raw, ok := root["duration"]
+	if !ok || raw == nil {
+		return
+	}
+	s, isStr := raw.(string)
+	if !isStr {
+		return
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		root["duration"] = n
+		return
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		root["duration"] = f
+	}
+}
+
+func videoPollValueEmpty(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x) == ""
+	case map[string]any:
+		return len(x) == 0
+	default:
+		return false
+	}
+}
+
+func firstNonEmptyVideoPollValue(values ...any) any {
+	for _, v := range values {
+		if !videoPollValueEmpty(v) {
+			return v
+		}
+	}
+	return nil
 }
 
 // MergeVideoPollPassthroughFields 将上游存在的透传字段合并进响应 JSON 顶层。

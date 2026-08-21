@@ -46,4 +46,12 @@ func TestExtractTotalTokensFromTaskData_VideoGenerationsTwoFormats(t *testing.T)
 		}
 	}`)
 	require.Equal(t, 191254, extractTotalTokensFromTaskData(format2))
+
+	resultSummary := []byte(`{
+		"id":"01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"status":"succeeded",
+		"resultSummary":{"duration":"4","usage":{"completion_tokens":38830,"total_tokens":38830}}
+	}`)
+	require.Equal(t, 38830, extractTotalTokensFromTaskData(resultSummary))
+	require.Equal(t, 4, extractDurationFromTaskData(resultSummary))
 }
