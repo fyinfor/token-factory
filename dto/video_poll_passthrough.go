@@ -23,6 +23,12 @@ func IsVideoGenerationsFetchPath(path string) bool {
 	return strings.HasPrefix(strings.TrimSpace(path), "/v1/video/generations/")
 }
 
+// IsContentsGenerationsFetchPath 判断是否为 GET /api/v3/contents/generations/tasks/{task_id} 查询路由。
+func IsContentsGenerationsFetchPath(path string) bool {
+	p := strings.TrimSpace(path)
+	return strings.HasPrefix(p, "/api/v3/contents/generations/tasks/")
+}
+
 // ExtractVideoPollPassthroughFields 从上游查询原始 JSON 中提取需透传的字段。
 // 依次扫描顶层、data、result、resultSummary 对象；字段存在即保留原值（含 0 / false / 空字符串）。
 func ExtractVideoPollPassthroughFields(upstreamJSON []byte) map[string]any {

@@ -13,6 +13,7 @@ import (
 
 func TestSubmitURL(t *testing.T) {
 	assert.Equal(t, "https://api.tokenspace.net.cn/api/v3/contents/generations/tasks", SubmitURL("https://api.tokenspace.net.cn/"))
+	assert.Equal(t, "https://api.tokenspace.net.cn/api/v3/contents/generations/tasks/cgt-1", FetchURL("https://api.tokenspace.net.cn/", "cgt-1"))
 }
 
 func TestConvertToRequestPayload_Text2Video(t *testing.T) {
@@ -278,10 +279,10 @@ func TestConvertToOpenAIVideo_IncludesLastFrameURLInMetadata(t *testing.T) {
 		"usage":{"completion_tokens":10,"total_tokens":10}
 	}`)
 	task := &model.Task{
-		TaskID:   "local_task",
-		Status:   model.TaskStatusSuccess,
-		Progress: "100%",
-		Data:     upstream,
+		TaskID:     "local_task",
+		Status:     model.TaskStatusSuccess,
+		Progress:   "100%",
+		Data:       upstream,
 		Properties: model.Properties{OriginModelName: "doubao-seedance-2-0-260128"},
 	}
 	out, err := a.ConvertToOpenAIVideo(task)

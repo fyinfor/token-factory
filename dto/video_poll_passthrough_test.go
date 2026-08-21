@@ -176,8 +176,8 @@ func TestParseVideoGenerationsPollUpstream_ResultSummary(t *testing.T) {
 func TestCorrectVideoPollTimestamps_MatchesTaskLogNotUpstream(t *testing.T) {
 	// 任务日志（UTC+8）：提交 16:47:48、结束 16:50:54；上游 created_at/updated_at 偏差约 20 分钟。
 	const (
-		taskSubmitUnix = int64(1783500468)
-		taskFinishUnix = int64(1783500654)
+		taskSubmitUnix  = int64(1783500468)
+		taskFinishUnix  = int64(1783500654)
 		upstreamCreated = int64(1783499259)
 	)
 	resp := map[string]any{
@@ -194,4 +194,6 @@ func TestCorrectVideoPollTimestamps_MatchesTaskLogNotUpstream(t *testing.T) {
 func TestIsVideoGenerationsFetchPath(t *testing.T) {
 	require.True(t, IsVideoGenerationsFetchPath("/v1/video/generations/task_abc"))
 	require.False(t, IsVideoGenerationsFetchPath("/v1/videos/task_abc"))
+	require.True(t, IsContentsGenerationsFetchPath("/api/v3/contents/generations/tasks/cgt-1"))
+	require.False(t, IsContentsGenerationsFetchPath("/v1/video/generations/cgt-1"))
 }

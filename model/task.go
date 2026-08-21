@@ -144,6 +144,7 @@ type TaskPrivateData struct {
 	// TfOpenVideoUpstreamStyle：TokenFactoryOpen(60) 视频上游路径风格，供轮询与提交一致。
 	// 空或 "video_generations" => GET {base}/v1/video/generations/{id}；"openai_videos" => GET {base}/v1/videos/{id}。
 	TfOpenVideoUpstreamStyle   string `json:"tf_open_video_upstream_style,omitempty"`
+	SeedanceFetchAPI           string `json:"seedance_fetch_api,omitempty"` // 火山方舟-Seedance 查询路径快照
 	AliyunVideoGuardrailTaskID string `json:"aliyun_video_guardrail_task_id,omitempty"`
 	AliyunVideoGuardrailStatus string `json:"aliyun_video_guardrail_status,omitempty"`
 	AliyunVideoGuardrailURL    string `json:"aliyun_video_guardrail_url,omitempty"`
