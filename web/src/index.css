@@ -1412,7 +1412,7 @@ html.dark .api-docs-code-block .hljs-meta {
 }
 
 body.api-docs-desktop-open {
-  --model-detail-desktop-width: 800px;
+  --model-detail-desktop-width: 850px;
   --api-docs-desktop-width: min(
     640px,
     calc(100vw - var(--model-detail-desktop-width))
@@ -1420,7 +1420,7 @@ body.api-docs-desktop-open {
 }
 
 .api-docs-desktop-panel {
-  right: var(--model-detail-desktop-width, 800px);
+  right: var(--model-detail-desktop-width, 850px);
   width: var(--api-docs-desktop-width, min(640px, 50vw));
 }
 
