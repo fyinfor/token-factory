@@ -12,14 +12,17 @@ import { Input, Typography, Button, Switch, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
 import { Plus, X, Film, Upload as UploadIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
+import { PLAYGROUND_MEDIA_UNLIMITED_COUNT } from '../../constants/playground.constants';
 import { showError, showSuccess } from '../../helpers';
 import {
   appendUploadedMediaUrl,
-  canAddMoreMediaUrls,
+  canAcceptMoreMediaUrls,
+  canAddMediaUrlRow,
   countFilledMediaUrls,
+  isUnlimitedMediaCount,
   uploadPlaygroundMediaFile,
 } from '../../helpers/playgroundMediaInputUtils';
+import PlaygroundMediaThumb from './PlaygroundMediaThumb';
 
 const VideoUrlInput = ({
   videoUrls,
@@ -28,7 +31,7 @@ const VideoUrlInput = ({
   onVideoEnabledChange,
   allowToggle = true,
   disabled = false,
-  maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
+  maxCount = PLAYGROUND_MEDIA_UNLIMITED_COUNT,
 }) => {
   const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
@@ -36,10 +39,12 @@ const VideoUrlInput = ({
   const enabled = videoEnabled !== false;
   const list = videoUrls || [];
   const filledCount = countFilledMediaUrls(list);
-  const canAddMore = canAddMoreMediaUrls(list, maxCount);
+  const canAddRow = canAddMediaUrlRow(list, maxCount);
+  const canAcceptMore = canAcceptMoreMediaUrls(list, maxCount);
+  const unlimited = isUnlimitedMediaCount(maxCount);
 
   const handleAdd = () => {
-    if (!canAddMore) {
+    if (!canAddRow) {
       return;
     }
     onVideoUrlsChange([...list, '']);
@@ -64,11 +69,13 @@ const VideoUrlInput = ({
         return;
       }
 
-      if (!canAddMoreMediaUrls(list, maxCount)) {
+      if (!canAcceptMoreMediaUrls(list, maxCount)) {
         showError(
-          t('操练场素材已达上限', '最多添加 {{count}} 个', {
-            count: maxCount,
-          }),
+          unlimited
+            ? t('无法继续添加素材')
+            : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                count: maxCount,
+              }),
         );
         onError?.(new Error('limit'));
         return;
@@ -84,9 +91,11 @@ const VideoUrlInput = ({
         );
         if (!ok) {
           showError(
-            t('操练场素材已达上限', '最多添加 {{count}} 个', {
-              count: maxCount,
-            }),
+            unlimited
+              ? t('无法继续添加素材')
+              : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                  count: maxCount,
+                }),
           );
           onError?.(new Error('limit'));
           return;
@@ -105,7 +114,7 @@ const VideoUrlInput = ({
         setUploading(false);
       }
     },
-    [list, maxCount, onVideoUrlsChange, t],
+    [list, maxCount, onVideoUrlsChange, t, unlimited],
   );
 
   return (
@@ -148,7 +157,7 @@ const VideoUrlInput = ({
             accept='video/*,.mp4,.mov,.webm,.avi,.mkv'
             showUploadList={false}
             customRequest={handleUpload}
-            disabled={!enabled || disabled || uploading || !canAddMore}
+            disabled={!enabled || disabled || uploading || !canAcceptMore}
           >
             <Button
               icon={
@@ -161,7 +170,7 @@ const VideoUrlInput = ({
               size='small'
               theme='light'
               className='playground-media-action !rounded-lg'
-              disabled={!enabled || disabled || uploading || !canAddMore}
+              disabled={!enabled || disabled || uploading || !canAcceptMore}
             >
               {uploading ? t('上传中') : t('上传')}
             </Button>
@@ -173,23 +182,29 @@ const VideoUrlInput = ({
             type='primary'
             onClick={handleAdd}
             className='playground-media-action-round'
-            disabled={!enabled || disabled || !canAddMore}
+            disabled={!enabled || disabled || !canAddRow}
           />
         </div>
       </div>
 
       {enabled && list.length > 0 && (
         <Typography.Text className='mb-2 block text-xs text-[var(--semi-color-text-2)]'>
-          {t('已添加')} {filledCount}/{maxCount} {t('个视频')}
+          {t('已添加')} {unlimited ? filledCount : `${filledCount}/${maxCount}`}{' '}
+          {t('个视频')}
         </Typography.Text>
       )}
 
       <div
-        className={`space-y-2 max-h-32 overflow-y-auto image-list-scroll ${!enabled || disabled ? 'opacity-50' : ''}`}
+        className={`space-y-2 max-h-52 overflow-y-auto image-list-scroll ${!enabled || disabled ? 'opacity-50' : ''}`}
       >
         {list.map((url, index) => (
           <div key={index} className='flex items-center gap-2'>
-            <div className='flex-1'>
+            <PlaygroundMediaThumb
+              value={url}
+              kind='video'
+              disabled={!enabled || disabled}
+            />
+            <div className='min-w-0 flex-1'>
               <Input
                 placeholder={`https://example.com/video${index + 1}.mp4`}
                 value={url}
