@@ -41,18 +41,7 @@ type playgroundMediaOptionsResponse struct {
 }
 
 func tokenAllowsDiscoveryModel(c *gin.Context, modelName string) bool {
-	if !common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
-		return true
-	}
-	raw, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
-	if !ok {
-		return false
-	}
-	limits, ok := raw.(map[string]bool)
-	if !ok {
-		return false
-	}
-	return model.ModelLimitMapAllows(limits, modelName)
+	return service.TokenAllowsModel(c, modelName)
 }
 
 func playgroundDiscoveryGroupsForToken(c *gin.Context) ([]string, bool) {

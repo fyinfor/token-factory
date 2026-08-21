@@ -79,6 +79,35 @@ func (t *Task) GetData(v any) error {
 	return common.Unmarshal(t.Data, &v)
 }
 
+// GetOriginModelName 返回任务提交时的客户端模型名（计费与权限校验优先使用）。
+func (t *Task) GetOriginModelName() string {
+	if t == nil {
+		return ""
+	}
+	if bc := t.PrivateData.BillingContext; bc != nil {
+		if name := strings.TrimSpace(bc.OriginModelName); name != "" {
+			return name
+		}
+	}
+	return strings.TrimSpace(t.Properties.OriginModelName)
+}
+
+// GetFetchAccessModelName 查询结果鉴权用的模型名：优先 origin，其次任务 data.model。
+func (t *Task) GetFetchAccessModelName() string {
+	if name := t.GetOriginModelName(); name != "" {
+		return name
+	}
+	if t == nil || len(t.Data) == 0 {
+		return ""
+	}
+	var taskData map[string]interface{}
+	if err := common.Unmarshal(t.Data, &taskData); err != nil {
+		return ""
+	}
+	m, _ := taskData["model"].(string)
+	return strings.TrimSpace(m)
+}
+
 type Properties struct {
 	Input             string `json:"input"`
 	UpstreamModelName string `json:"upstream_model_name,omitempty"`
@@ -513,6 +542,19 @@ func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
 	var err error
 	err = DB.Where("user_id = ? and task_id in (?)", userId, taskIds).
 		Find(&task).Error
+	if err != nil {
+		return nil, err
+	}
+	return task, nil
+}
+
+// GetByTaskIdsOnly 按任务 ID 列表查询，不限制归属用户（管理员调试查询）。
+func GetByTaskIdsOnly(taskIds []any) ([]*Task, error) {
+	if len(taskIds) == 0 {
+		return nil, nil
+	}
+	var task []*Task
+	err := DB.Where("task_id in (?)", taskIds).Find(&task).Error
 	if err != nil {
 		return nil, err
 	}

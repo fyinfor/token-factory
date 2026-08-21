@@ -36,6 +36,10 @@ import {
   updateMapValue,
   initializeMaps,
 } from '../../helpers/dashboard';
+import {
+  applyModelConsumptionMultiplier,
+  normalizeModelConsumptionMultiplier,
+} from '../../helpers/modelConsumptionDisplay';
 
 export const useDashboardCharts = (
   dataExportDefaultTime,
@@ -279,7 +283,9 @@ export const useDashboardCharts = (
   }, []);
 
   const updateChartData = useCallback(
-    (data) => {
+    (data, mxxh = 1) => {
+      const modelConsumptionMultiplier =
+        normalizeModelConsumptionMultiplier(mxxh);
       const processedData = processRawData(
         data,
         dataExportDefaultTime,
@@ -342,14 +348,16 @@ export const useDashboardCharts = (
         let timeData = Array.from(uniqueModels).map((model) => {
           const key = `${time}-${model}`;
           const aggregated = aggregatedData.get(key);
+          const displayAmount = applyModelConsumptionMultiplier(
+            aggregated?.displayAmount || 0,
+            modelConsumptionMultiplier,
+          );
           return {
             Time: time,
             Model: model,
             rawQuota: aggregated?.quota || 0,
-            rawDisplayAmount: aggregated?.displayAmount || 0,
-            Usage: aggregated?.displayAmount
-              ? aggregated.displayAmount.toFixed(4)
-              : 0,
+            rawDisplayAmount: displayAmount,
+            Usage: displayAmount ? displayAmount.toFixed(4) : 0,
           };
         });
 
@@ -375,7 +383,12 @@ export const useDashboardCharts = (
       updateChartSpec(
         setSpecLine,
         newLineData,
-        `${t('总计')}：${renderQuotaWithAmount(totalDisplayQuota)}`,
+        `${t('总计')}：${renderQuotaWithAmount(
+          applyModelConsumptionMultiplier(
+            totalDisplayQuota,
+            modelConsumptionMultiplier,
+          ),
+        )}`,
         newModelColors,
         'barData',
       );

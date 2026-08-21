@@ -28,12 +28,15 @@ type PriceExportModelMaps struct {
 	VideoCompletionRatio map[string]float64 `json:"VideoCompletionRatio"`
 	// 视频按个计费固定价
 	VideoPrice map[string]float64 `json:"VideoPrice"`
-	// 视频阶梯定价规则（按分辨率/音轨，嵌套对象）
+	// 视频阶梯定价规则（按分辨率/音轨，嵌套对象）。
+	// 覆盖：按秒 / 按条 / 按 token（text|image|video_to_video_per_token）以及视频超分按秒（video_upscale_per_second）。
 	VideoPricingRules map[string]json.RawMessage `json:"VideoPricingRules"`
 	// 图片按张计费固定价
 	ImagePrice map[string]float64 `json:"ImagePrice"`
 	// 图片阶梯定价规则（按分辨率，嵌套对象）
 	ImagePricingRules map[string]json.RawMessage `json:"ImagePricingRules"`
+	// ASR 语音识别按秒单价（美元/秒）
+	ASRPrice map[string]float64 `json:"ASRPrice"`
 	// 统一 Token 阶梯计费（输入 token 命中单档）
 	ModelRequestTierPricing map[string]json.RawMessage `json:"ModelRequestTierPricing"`
 }
@@ -141,6 +144,7 @@ func isModelMapsEmpty(m PriceExportModelMaps) bool {
 		len(m.VideoPricingRules) == 0 &&
 		len(m.ImagePrice) == 0 &&
 		len(m.ImagePricingRules) == 0 &&
+		len(m.ASRPrice) == 0 &&
 		len(m.ModelRequestTierPricing) == 0
 }
 
@@ -161,6 +165,7 @@ var globalPriceScalarFields = []struct {
 	{"VideoCompletionRatio", func(m *PriceExportModelMaps) map[string]float64 { return m.VideoCompletionRatio }},
 	{"VideoPrice", func(m *PriceExportModelMaps) map[string]float64 { return m.VideoPrice }},
 	{"ImagePrice", func(m *PriceExportModelMaps) map[string]float64 { return m.ImagePrice }},
+	{"ASRPrice", func(m *PriceExportModelMaps) map[string]float64 { return m.ASRPrice }},
 }
 
 // globalPriceComplexFields 全局复杂价格 Option 键（嵌套对象）与 PriceExportModelMaps 字段的绑定关系。
@@ -251,20 +256,21 @@ func safeRawMessageMap(m map[string]json.RawMessage) map[string]json.RawMessage 
 func ExportPrices(c *gin.Context) {
 	// 读取全局价格
 	globalPrices := PriceExportModelMaps{
-		ModelPrice:           parseFloatMapSafe(readOptionStr("ModelPrice")),
-		ModelRatio:           parseFloatMapSafe(readOptionStr("ModelRatio")),
-		CompletionRatio:      parseFloatMapSafe(readOptionStr("CompletionRatio")),
-		CacheRatio:           parseFloatMapSafe(readOptionStr("CacheRatio")),
-		CreateCacheRatio:     parseFloatMapSafe(readOptionStr("CreateCacheRatio")),
-		ImageRatio:           parseFloatMapSafe(readOptionStr("ImageRatio")),
-		AudioRatio:           parseFloatMapSafe(readOptionStr("AudioRatio")),
-		AudioCompletionRatio: parseFloatMapSafe(readOptionStr("AudioCompletionRatio")),
-		VideoRatio:           parseFloatMapSafe(readOptionStr("VideoRatio")),
-		VideoCompletionRatio: parseFloatMapSafe(readOptionStr("VideoCompletionRatio")),
-		VideoPrice:           parseFloatMapSafe(readOptionStr("VideoPrice")),
-		VideoPricingRules:    parseRawMessageMapSafe(readOptionStr("VideoPricingRules")),
-		ImagePrice:           parseFloatMapSafe(readOptionStr("ImagePrice")),
-		ImagePricingRules:    parseRawMessageMapSafe(readOptionStr("ImagePricingRules")),
+		ModelPrice:              parseFloatMapSafe(readOptionStr("ModelPrice")),
+		ModelRatio:              parseFloatMapSafe(readOptionStr("ModelRatio")),
+		CompletionRatio:         parseFloatMapSafe(readOptionStr("CompletionRatio")),
+		CacheRatio:              parseFloatMapSafe(readOptionStr("CacheRatio")),
+		CreateCacheRatio:        parseFloatMapSafe(readOptionStr("CreateCacheRatio")),
+		ImageRatio:              parseFloatMapSafe(readOptionStr("ImageRatio")),
+		AudioRatio:              parseFloatMapSafe(readOptionStr("AudioRatio")),
+		AudioCompletionRatio:    parseFloatMapSafe(readOptionStr("AudioCompletionRatio")),
+		VideoRatio:              parseFloatMapSafe(readOptionStr("VideoRatio")),
+		VideoCompletionRatio:    parseFloatMapSafe(readOptionStr("VideoCompletionRatio")),
+		VideoPrice:              parseFloatMapSafe(readOptionStr("VideoPrice")),
+		VideoPricingRules:       parseRawMessageMapSafe(readOptionStr("VideoPricingRules")),
+		ImagePrice:              parseFloatMapSafe(readOptionStr("ImagePrice")),
+		ImagePricingRules:       parseRawMessageMapSafe(readOptionStr("ImagePricingRules")),
+		ASRPrice:                parseFloatMapSafe(readOptionStr("ASRPrice")),
 		ModelRequestTierPricing: parseRawMessageMapSafe(readOptionStr("ModelRequestTierPricing")),
 	}
 
@@ -325,20 +331,21 @@ func ExportPrices(c *gin.Context) {
 		channelEntries = append(channelEntries, PriceExportChannelEntry{
 			ChannelName: name,
 			Models: PriceExportModelMaps{
-				ModelPrice:           safeFloatMap(chModelPrice[idStr]),
-				ModelRatio:           safeFloatMap(chModelRatio[idStr]),
-				CompletionRatio:      safeFloatMap(chCompletionRatio[idStr]),
-				CacheRatio:           safeFloatMap(chCacheRatio[idStr]),
-				CreateCacheRatio:     safeFloatMap(chCreateCacheRatio[idStr]),
-				ImageRatio:           safeFloatMap(chImageRatio[idStr]),
-				AudioRatio:           safeFloatMap(chAudioRatio[idStr]),
-				AudioCompletionRatio: safeFloatMap(chAudioCompletionRatio[idStr]),
-				VideoRatio:           safeFloatMap(chVideoRatio[idStr]),
-				VideoCompletionRatio: safeFloatMap(chVideoCompletionRatio[idStr]),
-				VideoPrice:           safeFloatMap(chVideoPrice[idStr]),
-				VideoPricingRules:    safeRawMessageMap(chVideoPricingRules[idStr]),
-				ImagePrice:           safeFloatMap(chImagePrice[idStr]),
-				ImagePricingRules:    safeRawMessageMap(chImagePricingRules[idStr]),
+				ModelPrice:              safeFloatMap(chModelPrice[idStr]),
+				ModelRatio:              safeFloatMap(chModelRatio[idStr]),
+				CompletionRatio:         safeFloatMap(chCompletionRatio[idStr]),
+				CacheRatio:              safeFloatMap(chCacheRatio[idStr]),
+				CreateCacheRatio:        safeFloatMap(chCreateCacheRatio[idStr]),
+				ImageRatio:              safeFloatMap(chImageRatio[idStr]),
+				AudioRatio:              safeFloatMap(chAudioRatio[idStr]),
+				AudioCompletionRatio:    safeFloatMap(chAudioCompletionRatio[idStr]),
+				VideoRatio:              safeFloatMap(chVideoRatio[idStr]),
+				VideoCompletionRatio:    safeFloatMap(chVideoCompletionRatio[idStr]),
+				VideoPrice:              safeFloatMap(chVideoPrice[idStr]),
+				VideoPricingRules:       safeRawMessageMap(chVideoPricingRules[idStr]),
+				ImagePrice:              safeFloatMap(chImagePrice[idStr]),
+				ImagePricingRules:       safeRawMessageMap(chImagePricingRules[idStr]),
+				ASRPrice:                map[string]float64{},
 				ModelRequestTierPricing: safeRawMessageMap(chModelRequestTierPricing[idStr]),
 			},
 		})
