@@ -30,8 +30,17 @@ export const MESSAGE_ROLES = {
   SYSTEM: 'system',
 };
 
-/** 操练场图片/视频素材 URL 各自最多条数 */
+/** 操练场图片模式参考图 URL 最多条数 */
 export const PLAYGROUND_MEDIA_MAX_COUNT = 3;
+/** 操练场视频首尾帧最多张数 */
+export const PLAYGROUND_VIDEO_FRAME_MAX_COUNT = 2;
+/** 操练场视频参考图 / 视频 / 音频：不限制数量 */
+export const PLAYGROUND_MEDIA_UNLIMITED_COUNT = Number.POSITIVE_INFINITY;
+/** 操练场视频图片地址 Tab：参考图 / 首尾帧互斥 */
+export const PLAYGROUND_VIDEO_IMAGE_TABS = {
+  REFERENCE: 'reference',
+  FRAMES: 'frames',
+};
 
 // 默认消息示例 - 使用函数生成以支持 i18n
 export const getDefaultMessages = (t) => [
@@ -108,6 +117,8 @@ export const DEFAULT_CONFIG = {
     stream: true,
     imageEnabled: false,
     imageUrls: [''],
+    frameImageUrls: [''],
+    videoImageTab: PLAYGROUND_VIDEO_IMAGE_TABS.REFERENCE,
     videoUrls: [''],
     audioUrls: [''],
     selected_model_tags: [],

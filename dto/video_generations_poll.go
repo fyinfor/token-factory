@@ -51,7 +51,7 @@ func ParseVideoGenerationsPollUpstream(raw []byte) *VideoGenerationsPollUpstream
 		return nil
 	}
 	var upstream VideoGenerationsPollUpstream
-	if err := common.Unmarshal(raw, &upstream); err != nil {
+	if err := common.Unmarshal(LiftVideoPollResultSummaryJSON(raw), &upstream); err != nil {
 		return nil
 	}
 	return &upstream

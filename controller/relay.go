@@ -171,6 +171,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	// JD 采K3测试技术对接 - kimi‑k3专属特殊适配
+	if helper.AbortIfKimiK3EmptyUser(c, request) {
+		return
+	}
+
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		tokenFactoryError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
@@ -785,6 +790,9 @@ func RelayTask(c *gin.Context) {
 		}
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
 		task.PrivateData.TfOpenVideoUpstreamStyle = relayInfo.TfOpenVideoUpstreamStyle
+		if relayInfo.ChannelType == constant.ChannelTypeSeedance || relayInfo.ChannelType == constant.ChannelTypeDoubaoVideo {
+			task.PrivateData.SeedanceFetchAPI = relayInfo.ChannelOtherSettings.SeedanceFetchAPI
+		}
 		if k := strings.TrimSpace(relayInfo.ApiKey); k != "" {
 			// 轮询上游（如腾讯云 DescribeTaskDetail）时使用与提交相同的密钥，避免多 Key 渠道错钥
 			task.PrivateData.Key = k

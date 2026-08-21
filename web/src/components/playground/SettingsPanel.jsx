@@ -61,6 +61,7 @@ import CustomRequestEditor from './CustomRequestEditor';
 import ImageUrlInput from './ImageUrlInput';
 import MaterialLibraryButton from './MaterialLibraryButton';
 import ParameterControl from './ParameterControl';
+import VideoImageUrlInput from './VideoImageUrlInput';
 import VideoUrlInput from './VideoUrlInput';
 import AudioUrlInput from './AudioUrlInput';
 
@@ -381,19 +382,27 @@ const SettingsPanel = ({
       <div className='playground-media-stack'>
         <MaterialLibraryButton
           disabled={customRequestMode}
+          videoImageTab={inputs.videoImageTab}
           imageUrls={inputs.imageUrls || ['']}
           onImageUrlsChange={(urls) => onInputChange('imageUrls', urls)}
+          frameImageUrls={inputs.frameImageUrls || ['']}
+          onFrameImageUrlsChange={(urls) =>
+            onInputChange('frameImageUrls', urls)
+          }
           videoUrls={inputs.videoUrls || ['']}
           onVideoUrlsChange={(urls) => onInputChange('videoUrls', urls)}
           audioUrls={inputs.audioUrls || ['']}
           onAudioUrlsChange={(urls) => onInputChange('audioUrls', urls)}
         />
-        <ImageUrlInput
+        <VideoImageUrlInput
           imageUrls={inputs.imageUrls || ['']}
-          imageEnabled={true}
+          frameImageUrls={inputs.frameImageUrls || ['']}
+          videoImageTab={inputs.videoImageTab}
           onImageUrlsChange={(urls) => onInputChange('imageUrls', urls)}
-          onImageEnabledChange={() => {}}
-          allowToggle={false}
+          onFrameImageUrlsChange={(urls) =>
+            onInputChange('frameImageUrls', urls)
+          }
+          onVideoImageTabChange={(tab) => onInputChange('videoImageTab', tab)}
           disabled={customRequestMode}
         />
         <VideoUrlInput

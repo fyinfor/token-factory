@@ -40,6 +40,23 @@ func VideoGenerations(c *gin.Context) {
 func VideoGenerationsTaskId(c *gin.Context) {
 }
 
+// ContentsGenerationsTaskId
+// @Summary 查询视频（火山方舟 Contents API）
+// @Description 与官方 GET /api/v3/contents/generations/tasks/{task_id} 对齐的任务查询入口；旧接口 GET /v1/video/generations/{task_id} 仍可用。
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param task_id path string true "Task ID"
+// @Success 200 {object} dto.VideoTaskResponse "任务状态和结果"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "无权限"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v3/contents/generations/tasks/{task_id} [get]
+func ContentsGenerationsTaskId(c *gin.Context) {
+}
+
 // KlingText2VideoGenerations
 // @Summary 可灵文生视频
 // @Description 调用可灵AI文生视频接口，生成视频内容

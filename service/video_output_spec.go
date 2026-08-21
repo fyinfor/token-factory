@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -20,16 +21,17 @@ func resolveVideoOutputSpecFromUpstream(task *model.Task, taskResult *relaycommo
 		mergeVideoSpecFields(&spec, taskResult.Resolution, taskResult.Duration, taskResult.Ratio)
 	}
 	if task != nil && len(task.Data) > 0 {
+		data := dto.LiftVideoPollResultSummaryJSON(task.Data)
 		var upstream struct {
 			Resolution string `json:"resolution"`
 			Duration   int    `json:"duration"`
 			Ratio      string `json:"ratio"`
 		}
-		if err := common.Unmarshal(task.Data, &upstream); err == nil {
+		if err := common.Unmarshal(data, &upstream); err == nil {
 			mergeVideoSpecFields(&spec, upstream.Resolution, upstream.Duration, upstream.Ratio)
 		}
 		if spec.Duration <= 0 {
-			if d := extractDurationFromTaskData(task.Data); d > 0 {
+			if d := extractDurationFromTaskData(data); d > 0 {
 				spec.Duration = d
 			}
 		}

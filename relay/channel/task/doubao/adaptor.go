@@ -202,29 +202,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	return dResp.ID, responseBody, nil
 }
 
-// FetchTask fetch task status
+// FetchTask 查询上游任务状态。双接口由 body.seedance_fetch_api 选择，实际 HTTP 走 QueryTask。
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
-	taskID, ok := body["task_id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid task_id")
+	var taskID string
+	if body != nil {
+		taskID, _ = body["task_id"].(string)
 	}
-
-	uri := FetchURL(baseUrl, taskID)
-
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+key)
-
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return QueryTask(baseUrl, key, taskID, fetchAPIFromBody(body), proxy)
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
@@ -433,7 +417,8 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 	resTask := responseTask{}
-	if err := common.Unmarshal(respBody, &resTask); err != nil {
+	// 先把旧 /v1/video/generations 与 Contents API 回包归一，再走原有 status/content 映射。
+	if err := common.Unmarshal(AdaptFetchResponseJSON(respBody), &resTask); err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")
 	}
 
@@ -481,7 +466,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	var dResp responseTask
-	if err := common.Unmarshal(originTask.Data, &dResp); err != nil {
+	if err := common.Unmarshal(AdaptFetchResponseJSON(originTask.Data), &dResp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal doubao task data failed")
 	}
 

@@ -30,6 +30,7 @@ import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   CHANNEL_OPTIONS,
   CHANNEL_SUPPLIER_TYPE_OPTIONS,
+  CHANNEL_TYPE_SEEDANCE,
   MODEL_FETCHABLE_CHANNEL_TYPES,
 } from '../../../../constants';
 import {
@@ -317,6 +318,7 @@ const EditChannelModal = (props) => {
     tencent_vod_region: '',
     model_rate_limits: [],
     video_upscale_rules: [],
+    seedance_fetch_api: 'contents_generations',
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -1253,6 +1255,10 @@ const EditChannelModal = (props) => {
                 template_id: Number(item?.template_id) || 0,
               }))
             : [];
+          data.seedance_fetch_api =
+            parsedSettings.seedance_fetch_api === 'video_generations'
+              ? 'video_generations'
+              : 'contents_generations';
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -1273,6 +1279,7 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_ignored_models = '';
           data.model_rate_limits = [];
           data.video_upscale_rules = [];
+          data.seedance_fetch_api = 'contents_generations';
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
@@ -1292,6 +1299,7 @@ const EditChannelModal = (props) => {
         data.upstream_model_update_ignored_models = '';
         data.model_rate_limits = [];
         data.video_upscale_rules = [];
+        data.seedance_fetch_api = 'contents_generations';
       }
 
       if (
@@ -2389,6 +2397,15 @@ const EditChannelModal = (props) => {
       delete settings.vertex_key_type;
     }
 
+    if (localInputs.type === CHANNEL_TYPE_SEEDANCE) {
+      settings.seedance_fetch_api =
+        localInputs.seedance_fetch_api === 'video_generations'
+          ? 'video_generations'
+          : 'contents_generations';
+    } else if ('seedance_fetch_api' in settings) {
+      delete settings.seedance_fetch_api;
+    }
+
     // type === 1 (OpenAI) 或 type === 14 (Claude): 设置字段透传控制（显式保存布尔值）
     if (localInputs.type === 1 || localInputs.type === 14) {
       settings.allow_service_tier = localInputs.allow_service_tier === true;
@@ -2487,6 +2504,7 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_ignored_models;
     delete localInputs.model_rate_limits;
     delete localInputs.video_upscale_rules;
+    delete localInputs.seedance_fetch_api;
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -4821,6 +4839,38 @@ const EditChannelModal = (props) => {
                                 '请填写 MiniMax 视频 V2 基础地址，例如 https://api.minimaxi.com/v2；网关会自动拼接 /video_generation 与查询路径，无需填写完整 URL。',
                               )}
                               className='!rounded-lg'
+                            />
+                          )}
+
+                          {inputs.type === CHANNEL_TYPE_SEEDANCE && (
+                            <Form.Select
+                              field='seedance_fetch_api'
+                              label={t('任务查询接口')}
+                              placeholder={t('请选择上游任务查询接口')}
+                              optionList={[
+                                {
+                                  label: t(
+                                    '火山方舟 Contents API（/api/v3/contents/generations/tasks/{task_id}）',
+                                  ),
+                                  value: 'contents_generations',
+                                },
+                                {
+                                  label: t(
+                                    'OpenAI 兼容查询（/v1/video/generations/{task_id}）',
+                                  ),
+                                  value: 'video_generations',
+                                },
+                              ]}
+                              style={{ width: '100%' }}
+                              onChange={(value) =>
+                                handleChannelOtherSettingsChange(
+                                  'seedance_fetch_api',
+                                  value,
+                                )
+                              }
+                              extraText={t(
+                                '提交仍走 Contents API。查询默认用新接口；选择旧接口时保留原 /v1/video/generations/{task_id} 逻辑，回包字段会自动适配。',
+                              )}
                             />
                           )}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
 	"github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -452,6 +453,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	}
 
 	path := requestPathForVideoFetch(c)
+	isContentsGenerationsAPI := dto.IsContentsGenerationsFetchPath(path)
 	isOpenAIVideoAPI := strings.HasPrefix(path, "/v1/videos/") ||
 		strings.HasPrefix(path, "/v1/video/generations/") ||
 		strings.HasPrefix(path, "/api/playground/videos/")
@@ -464,6 +466,17 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI, path); len(realtimeResp) > 0 {
 		respBody = realtimeResp
+		return
+	}
+
+	// 火山方舟 Contents API 查询：返回适配后的 Ark 原生字段，不走 OpenAI Video 形态。
+	if isContentsGenerationsAPI {
+		out, err := taskdoubao.BuildContentsGenerationsClientJSON(originTask, originTask.Data)
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "convert_to_contents_generations_failed", http.StatusInternalServerError)
+			return
+		}
+		respBody = out
 		return
 	}
 
@@ -555,6 +568,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath strin
 		"action":                       task.Action,
 		"channel_type":                 channelModel.Type,
 		"tf_open_video_upstream_style": task.PrivateData.TfOpenVideoUpstreamStyle,
+		"seedance_fetch_api":           dto.ResolveSeedanceFetchAPI(task.PrivateData.SeedanceFetchAPI, channelModel.GetOtherSettings().SeedanceFetchAPI),
 	}, proxy)
 	if err != nil || resp == nil {
 		return nil
@@ -655,6 +669,14 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath strin
 	if isOpenAIVideoAPI {
 		if resp := buildOpenAIVideoPollResponse(task, body, requestPath); len(resp) > 0 {
 			return resp
+		}
+		return nil
+	}
+
+	if dto.IsContentsGenerationsFetchPath(requestPath) {
+		out, err := taskdoubao.BuildContentsGenerationsClientJSON(task, body)
+		if err == nil && len(out) > 0 {
+			return out
 		}
 		return nil
 	}

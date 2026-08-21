@@ -12,12 +12,14 @@ import { Input, Typography, Button, Switch, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
 import { Plus, X, Music, Upload as UploadIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
+import { PLAYGROUND_MEDIA_UNLIMITED_COUNT } from '../../constants/playground.constants';
 import { showError, showSuccess } from '../../helpers';
 import {
   appendUploadedMediaUrl,
-  canAddMoreMediaUrls,
+  canAcceptMoreMediaUrls,
+  canAddMediaUrlRow,
   countFilledMediaUrls,
+  isUnlimitedMediaCount,
   uploadPlaygroundMediaFile,
 } from '../../helpers/playgroundMediaInputUtils';
 
@@ -32,7 +34,7 @@ const AudioUrlInput = ({
   onAudioEnabledChange,
   allowToggle = true,
   disabled = false,
-  maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
+  maxCount = PLAYGROUND_MEDIA_UNLIMITED_COUNT,
 }) => {
   const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
@@ -40,10 +42,12 @@ const AudioUrlInput = ({
   const enabled = audioEnabled !== false;
   const list = audioUrls || [];
   const filledCount = countFilledMediaUrls(list);
-  const canAddMore = canAddMoreMediaUrls(list, maxCount);
+  const canAddRow = canAddMediaUrlRow(list, maxCount);
+  const canAcceptMore = canAcceptMoreMediaUrls(list, maxCount);
+  const unlimited = isUnlimitedMediaCount(maxCount);
 
   const handleAdd = () => {
-    if (!canAddMore) {
+    if (!canAddRow) {
       return;
     }
     onAudioUrlsChange([...list, '']);
@@ -68,11 +72,13 @@ const AudioUrlInput = ({
         return;
       }
 
-      if (!canAddMoreMediaUrls(list, maxCount)) {
+      if (!canAcceptMoreMediaUrls(list, maxCount)) {
         showError(
-          t('操练场素材已达上限', '最多添加 {{count}} 个', {
-            count: maxCount,
-          }),
+          unlimited
+            ? t('无法继续添加素材')
+            : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                count: maxCount,
+              }),
         );
         onError?.(new Error('limit'));
         return;
@@ -88,9 +94,11 @@ const AudioUrlInput = ({
         );
         if (!ok) {
           showError(
-            t('操练场素材已达上限', '最多添加 {{count}} 个', {
-              count: maxCount,
-            }),
+            unlimited
+              ? t('无法继续添加素材')
+              : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                  count: maxCount,
+                }),
           );
           onError?.(new Error('limit'));
           return;
@@ -109,7 +117,7 @@ const AudioUrlInput = ({
         setUploading(false);
       }
     },
-    [list, maxCount, onAudioUrlsChange, t],
+    [list, maxCount, onAudioUrlsChange, t, unlimited],
   );
 
   return (
@@ -152,7 +160,7 @@ const AudioUrlInput = ({
             accept='audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac'
             showUploadList={false}
             customRequest={handleUpload}
-            disabled={!enabled || disabled || uploading || !canAddMore}
+            disabled={!enabled || disabled || uploading || !canAcceptMore}
           >
             <Button
               icon={
@@ -165,7 +173,7 @@ const AudioUrlInput = ({
               size='small'
               theme='light'
               className='playground-media-action !rounded-lg'
-              disabled={!enabled || disabled || uploading || !canAddMore}
+              disabled={!enabled || disabled || uploading || !canAcceptMore}
             >
               {uploading ? t('上传中') : t('上传')}
             </Button>
@@ -177,14 +185,15 @@ const AudioUrlInput = ({
             type='primary'
             onClick={handleAdd}
             className='playground-media-action-round'
-            disabled={!enabled || disabled || !canAddMore}
+            disabled={!enabled || disabled || !canAddRow}
           />
         </div>
       </div>
 
       {enabled && list.length > 0 && (
         <Typography.Text className='mb-2 block text-xs text-[var(--semi-color-text-2)]'>
-          {t('已添加')} {filledCount}/{maxCount} {t('个音频')}
+          {t('已添加')} {unlimited ? filledCount : `${filledCount}/${maxCount}`}{' '}
+          {t('个音频')}
         </Typography.Text>
       )}
 
