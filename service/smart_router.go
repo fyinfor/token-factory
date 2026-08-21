@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"os"
 	"sort"
 	"strings"
 
@@ -15,16 +14,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SmartRouterEnabled 默认开启。仅当 SMART_ROUTER_ENABLED 为 0 / false / no / off（不区分大小写）时关闭。
+// SmartRouterEnabled 已废弃：统一由 router-engine 处理智能路由，恒为 true。
 func SmartRouterEnabled() bool {
-	v := strings.TrimSpace(os.Getenv("SMART_ROUTER_ENABLED"))
-	if v == "" {
-		return true
-	}
-	if v == "0" || strings.EqualFold(v, "false") || strings.EqualFold(v, "no") || strings.EqualFold(v, "off") {
-		return false
-	}
 	return true
+}
+
+// TrySmartRouteChannel 兼容入口，委托 TryEngineRoute。
+func TrySmartRouteChannel(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string) (*model.Channel, string, bool) {
+	return TryEngineRoute(c, usingGroup, userGroup, modelName, providerJSON, nil)
+}
+
+// TrySmartRouteChannelWithFilter 兼容入口，委托 TryEngineRoute。
+func TrySmartRouteChannelWithFilter(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string, filter func(*model.Channel) bool) (*model.Channel, string, bool) {
+	return TryEngineRoute(c, usingGroup, userGroup, modelName, providerJSON, filter)
+}
+
+// TrySupplierRouteChannel 兼容入口，委托 TrySupplierEngineRoute。
+func TrySupplierRouteChannel(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string, supplierApplicationID int) (*model.Channel, string, bool) {
+	return TrySupplierEngineRoute(c, usingGroup, userGroup, modelName, providerJSON, supplierApplicationID, nil)
+}
+
+// TrySupplierRouteChannelWithFilter 兼容入口，委托 TrySupplierEngineRoute。
+func TrySupplierRouteChannelWithFilter(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string, supplierApplicationID int, channelFilter func(*model.Channel) bool) (*model.Channel, string, bool) {
+	return TrySupplierEngineRoute(c, usingGroup, userGroup, modelName, providerJSON, supplierApplicationID, channelFilter)
 }
 
 func channelProviderSlug(ch *model.Channel) string {
@@ -156,14 +168,6 @@ func buildRouterCandidatesFiltered(group, modelName string, filter func(*model.C
 			latSec = 0.001
 		}
 		tps := 1.0 / latSec
-		w := 0
-		if ch.Weight != nil {
-			w = int(*ch.Weight)
-		}
-		prio := int64(0)
-		if ch.Priority != nil {
-			prio = *ch.Priority
-		}
 		out = append(out, &router.EndpointCandidate{
 			ChannelID:         ch.Id,
 			Model:             modelName,
@@ -172,8 +176,6 @@ func buildRouterCandidatesFiltered(group, modelName string, filter func(*model.C
 			Healthy:           true,
 			LatencyP50Seconds: latSec,
 			ThroughputTps:     tps,
-			Priority:          prio,
-			Weight:            w,
 		})
 	}
 	return out, nil
@@ -233,177 +235,6 @@ func pickFirstEnabledChannel(orderedIDs []int) *model.Channel {
 		return ch
 	}
 	return nil
-}
-
-// TrySmartRouteChannel runs in-process router-engine when SmartRouterEnabled(). On success it stores
-// ContextKeySmartRouteChannelOrder for relay retries and returns the first channel.
-func TrySmartRouteChannel(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string) (*model.Channel, string, bool) {
-	if !SmartRouterEnabled() {
-		return nil, "", false
-	}
-	return TrySmartRouteChannelWithFilter(c, usingGroup, userGroup, modelName, providerJSON, nil)
-}
-
-// TrySmartRouteChannelWithFilter 在可选渠道过滤后做选路，并把完整有序候选写入
-// ContextKeySmartRouteChannelOrder，供创建任务失败时按序保底切换。
-//
-// filter 非空时（如视频 submit）：即使 SmartRouter 关闭，也会按单价排序产出有序候选，
-// 保证「创建保底」可用。filter 为空时行为与 TrySmartRouteChannel 一致（需 SmartRouter 开启）。
-func TrySmartRouteChannelWithFilter(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string, filter func(*model.Channel) bool) (*model.Channel, string, bool) {
-	if filter == nil && !SmartRouterEnabled() {
-		return nil, "", false
-	}
-	selectGroup := resolveSmartRouteGroupFiltered(usingGroup, userGroup, modelName, filter)
-	if selectGroup == "" {
-		return nil, "", false
-	}
-	cands, err := buildRouterCandidatesFiltered(selectGroup, modelName, filter)
-	if err != nil || len(cands) == 0 {
-		return nil, "", false
-	}
-	// 用户指定价：排除单价超出用户价格上限的渠道。
-	cands = filterEndpointCandidatesByUserPriceCap(c.GetInt("id"), modelName, cands)
-	if len(cands) == 0 {
-		return nil, "", false
-	}
-
-	candidateIDs := make([]int, 0, len(cands))
-	for _, cand := range cands {
-		if cand != nil {
-			candidateIDs = append(candidateIDs, cand.ChannelID)
-		}
-	}
-
-	if SmartRouterEnabled() {
-		models := []string{modelName}
-		if raw, ok := common.GetContextKey(c, constant.ContextKeyRequestModelsList); ok {
-			if sl, ok := raw.([]string); ok && len(sl) > 0 {
-				models = sl
-			}
-		}
-		req := router.SelectRequest{
-			Models:                  models,
-			ProviderPreferencesJSON: providerJSON,
-			Candidates:              cands,
-		}
-		if v, ok := common.GetContextKey(c, constant.ContextKeyRequestHasTools); ok {
-			if b, ok := v.(bool); ok {
-				req.RequestHasTools = b
-			}
-		}
-		if res, err := router.SelectProviders(req); err == nil && len(res.OrderedChannelIDs) > 0 {
-			candidateIDs = res.OrderedChannelIDs
-		} else if filter != nil {
-			// 视频等过滤路径：router-engine 失败时仍按价格序保底，不能丢候选池。
-			candidateIDs = orderEndpointCandidateIDsByPrice(cands)
-		} else {
-			return nil, "", false
-		}
-	} else {
-		// SmartRouter 关闭：过滤路径仍给出价格序，保证创建失败可切换。
-		candidateIDs = orderEndpointCandidateIDsByPrice(cands)
-	}
-
-	ch := pickFirstEnabledChannel(candidateIDs)
-	if ch == nil {
-		return nil, "", false
-	}
-	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, candidateIDs)
-	common.SetContextKey(c, constant.ContextKeySmartRouteSelectGroup, selectGroup)
-	if usingGroup == "auto" {
-		common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
-	}
-	return ch, selectGroup, true
-}
-
-// TrySupplierRouteChannel 在「强制供应商」语义下选择渠道：候选池限制为该供应商下满足
-// (group, model) 条件的启用渠道。SmartRouter 开启时走 router-engine 排序；关闭或 router-engine
-// 无可用候选时，回退到按优先级 + 权重的随机选择（与 GetRandomSatisfiedChannel 一致），并把最终
-// 候选顺序写入 ContextKeySmartRouteChannelOrder，保证控制器侧重试也严格落在同一供应商内。
-//
-// 返回 (channel, selectGroup, true) 表示已完成选择；返回 false 时表示候选为空，调用方应按
-// 正常"无可用渠道"错误处理，而不是再去兜底 SmartRouter / 随机，因为那会绕过供应商约束。
-func TrySupplierRouteChannel(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string, supplierApplicationID int) (*model.Channel, string, bool) {
-	return TrySupplierRouteChannelWithFilter(c, usingGroup, userGroup, modelName, providerJSON, supplierApplicationID, nil)
-}
-
-// TrySupplierRouteChannelWithFilter 同 TrySupplierRouteChannel，并额外叠加 channelFilter
-//（如视频 endpoint 能力），避免强制供应商池内落到不支持当前 relay 的渠道。
-func TrySupplierRouteChannelWithFilter(c *gin.Context, usingGroup, userGroup, modelName, providerJSON string, supplierApplicationID int, channelFilter func(*model.Channel) bool) (*model.Channel, string, bool) {
-	filter := func(ch *model.Channel) bool {
-		if ch == nil || ch.SupplierApplicationID != supplierApplicationID {
-			return false
-		}
-		if channelFilter != nil && !channelFilter(ch) {
-			return false
-		}
-		return true
-	}
-
-	// 自动分组下挑选一个"对该供应商下的该模型有候选"的子分组。
-	selectGroup := usingGroup
-	if usingGroup == "auto" {
-		selectGroup = ""
-		for _, g := range GetUserAutoGroup(userGroup) {
-			cands, _ := buildRouterCandidatesFiltered(g, modelName, filter)
-			if len(cands) > 0 {
-				selectGroup = g
-				break
-			}
-		}
-		if selectGroup == "" {
-			return nil, "", false
-		}
-	}
-
-	cands, err := buildRouterCandidatesFiltered(selectGroup, modelName, filter)
-	if err != nil || len(cands) == 0 {
-		return nil, "", false
-	}
-	// 用户指定价：供应商内候选同样受价格上限约束。
-	cands = filterEndpointCandidatesByUserPriceCap(c.GetInt("id"), modelName, cands)
-	if len(cands) == 0 {
-		return nil, "", false
-	}
-
-	candidateIDs := make([]int, 0, len(cands))
-	for _, cand := range cands {
-		candidateIDs = append(candidateIDs, cand.ChannelID)
-	}
-
-	if SmartRouterEnabled() {
-		models := []string{modelName}
-		if raw, ok := common.GetContextKey(c, constant.ContextKeyRequestModelsList); ok {
-			if sl, ok := raw.([]string); ok && len(sl) > 0 {
-				models = sl
-			}
-		}
-		req := router.SelectRequest{
-			Models:                  models,
-			ProviderPreferencesJSON: providerJSON,
-			Candidates:              cands,
-		}
-		if v, ok := common.GetContextKey(c, constant.ContextKeyRequestHasTools); ok {
-			if b, ok := v.(bool); ok {
-				req.RequestHasTools = b
-			}
-		}
-		if res, err := router.SelectProviders(req); err == nil && len(res.OrderedChannelIDs) > 0 {
-			candidateIDs = res.OrderedChannelIDs
-		}
-	}
-
-	// 按 candidateIDs 顺序取第一个启用渠道作为本次命中；其余供重试回退。
-	chosen := pickFirstEnabledChannel(candidateIDs)
-	if chosen == nil {
-		return nil, "", false
-	}
-	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, candidateIDs)
-	common.SetContextKey(c, constant.ContextKeySmartRouteSelectGroup, selectGroup)
-	if usingGroup == "auto" {
-		common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
-	}
-	return chosen, selectGroup, true
 }
 
 // IngestChatCompletionRoutingHints parses provider / models / tools from JSON body (OpenRouter-compatible).

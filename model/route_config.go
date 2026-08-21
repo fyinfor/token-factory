@@ -8,7 +8,7 @@ import "time"
 // 读全局模式 → 计算请求模型的归类 → 按该模式对候选渠道排序。
 
 const (
-	// RouteModeDefault 不走归类路由，使用原生选择逻辑（含 SmartRouter）。
+	// RouteModeDefault 路由关闭：不走智能路由，按渠道 ID 升序选首条可用。
 	RouteModeDefault = "default"
 	// RouteModeWeight 权重模式：按「归类 × 渠道」配置的权重，优先高权重渠道。
 	RouteModeWeight = "weight"
@@ -20,9 +20,14 @@ const (
 	RouteModePricePerf = "price_perf"
 )
 
-// IsImplementedRouteMode 返回该模式是否已实现路由逻辑。
+// IsImplementedRouteMode 返回该模式是否启用智能路由策略（weight / price）。
 func IsImplementedRouteMode(mode string) bool {
 	return mode == RouteModeWeight || mode == RouteModePrice
+}
+
+// IsRouteDisabled 返回路由是否关闭（default 或未识别模式）。
+func IsRouteDisabled(mode string) bool {
+	return !IsImplementedRouteMode(mode)
 }
 
 // RouteConfig 全局路由配置（单例，固定 ID=1）。
@@ -134,4 +139,9 @@ func UpsertModelGroupWeight(groupKey string, channelID int, weight int, enabled 
 	}
 	_ = DB.First(&existing, existing.ID).Error
 	return existing, nil
+}
+
+// DeleteModelGroupWeightByID 按 ID 删除全局归类权重。
+func DeleteModelGroupWeightByID(id uint) error {
+	return DB.Delete(&ModelGroupWeight{}, id).Error
 }

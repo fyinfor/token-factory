@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -96,6 +97,34 @@ func LoadAllModelGroupOverrides() ([]ModelGroupOverride, error) {
 		return nil, err
 	}
 	return rows, nil
+}
+
+// UpsertModelGroupOverride 新增或更新全局「原始模型名 → 归类 key」覆盖。
+func UpsertModelGroupOverride(rawModel, groupKey string) (ModelGroupOverride, error) {
+	raw := strings.ToLower(strings.TrimSpace(rawModel))
+	key := strings.TrimSpace(groupKey)
+	if raw == "" || key == "" {
+		return ModelGroupOverride{}, fmt.Errorf("raw_model and group_key required")
+	}
+	var existing ModelGroupOverride
+	result := DB.Where("raw_model = ?", raw).First(&existing)
+	if result.RowsAffected == 0 {
+		ov := ModelGroupOverride{RawModel: raw, GroupKey: key}
+		if err := DB.Create(&ov).Error; err != nil {
+			return ov, err
+		}
+		return ov, nil
+	}
+	if err := DB.Model(&existing).Update("group_key", key).Error; err != nil {
+		return existing, err
+	}
+	_ = DB.First(&existing, existing.ID).Error
+	return existing, nil
+}
+
+// DeleteModelGroupOverrideByID 按 ID 删除全局模型归类覆盖。
+func DeleteModelGroupOverrideByID(id uint) error {
+	return DB.Delete(&ModelGroupOverride{}, id).Error
 }
 
 // ResolveModelGroupKey 返回某原始模型名最终归类 key：优先人工覆盖，否则自动归一化。

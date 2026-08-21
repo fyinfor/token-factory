@@ -169,13 +169,56 @@ const resolveUnifiedChannelPrice = (pricingIndex, channel) => {
   return best;
 };
 
-const RoutePolicyCard = ({ t }) => {
+const RoutePolicyCard = ({
+  t,
+  variant = 'self',
+  managedUserId = null,
+  hideHeader = false,
+}) => {
   const { t: translate } = useTranslation();
   const [userState] = useContext(UserContext);
   const [statusState] = useContext(StatusContext);
   const isAdmin = (userState?.user?.role || 0) >= 10;
   const statusLoaded = statusState?.status != null;
   const routeEnabled = statusState?.status?.tokenfactory_route_enabled === true;
+  const isAdminTemplate = variant === 'admin-template';
+  const isAdminUser = variant === 'admin-user' && Number(managedUserId) > 0;
+  const canManageGroupRoute = !isAdminTemplate;
+
+  const apiPaths = useMemo(() => {
+    if (isAdminTemplate) {
+      return {
+        getPolicy: '/api/admin/route-policy/template',
+        putMode: '/api/admin/route-policy/config',
+        putGroupRoute: null,
+        postWeight: '/api/admin/route-policy/template/weights',
+        deleteWeight: (id) => `/api/admin/route-policy/template/weights/${id}`,
+        postOverride: '/api/admin/route-policy/template/overrides',
+        deleteOverride: (id) => `/api/admin/route-policy/template/overrides/${id}`,
+      };
+    }
+    if (isAdminUser) {
+      const base = `/api/admin/route-policy/users/${managedUserId}`;
+      return {
+        getPolicy: base,
+        putMode: `${base}/mode`,
+        putGroupRoute: `${base}/group-route`,
+        postWeight: `${base}/weights`,
+        deleteWeight: (id) => `${base}/weights/${id}`,
+        postOverride: `${base}/overrides`,
+        deleteOverride: (id) => `${base}/overrides/${id}`,
+      };
+    }
+    return {
+      getPolicy: '/api/user/route-policy',
+      putMode: '/api/user/route-policy/mode',
+      putGroupRoute: '/api/user/route-policy/group-route',
+      postWeight: '/api/user/route-policy/weights',
+      deleteWeight: (id) => `/api/user/route-policy/weights/${id}`,
+      postOverride: '/api/user/route-policy/overrides',
+      deleteOverride: (id) => `/api/user/route-policy/overrides/${id}`,
+    };
+  }, [isAdminTemplate, isAdminUser, managedUserId]);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -206,7 +249,7 @@ const RoutePolicyCard = ({ t }) => {
       setLoadError('');
     }
     try {
-      const res = await API.get('/api/user/route-policy');
+      const res = await API.get(apiPaths.getPolicy);
       const { data } = res;
       if (data.success !== false) {
         setMode(data.mode ?? '');
@@ -232,7 +275,7 @@ const RoutePolicyCard = ({ t }) => {
         setLoading(false);
       }
     }
-  }, [tLocal]);
+  }, [tLocal, apiPaths.getPolicy]);
 
   // 拉取 /api/pricing，构建「渠道×模型 → 平台价」索引，使价格优模式展示与首页卡片完全一致。
   const fetchPricing = useCallback(async () => {
@@ -257,9 +300,15 @@ const RoutePolicyCard = ({ t }) => {
       setLoadError('');
       return;
     }
+    if (variant === 'admin-user' && !(Number(managedUserId) > 0)) {
+      setLoading(false);
+      setLoadError('');
+      setGroups([]);
+      return;
+    }
     fetchPolicy();
     fetchPricing();
-  }, [statusLoaded, routeEnabled, fetchPolicy, fetchPricing]);
+  }, [statusLoaded, routeEnabled, fetchPolicy, fetchPricing, variant, managedUserId]);
 
   // mode === '' 时跟随系统全局模式；界面直接展示 effectiveMode。
   const effectiveMode = mode === '' ? globalMode : mode;
@@ -272,7 +321,7 @@ const RoutePolicyCard = ({ t }) => {
     setMode(newMode);
     setSavingMode(true);
     try {
-      const res = await API.put('/api/user/route-policy/mode', { mode: newMode });
+      const res = await API.put(apiPaths.putMode, { mode: newMode });
       if (res.data.success) {
         showSuccess(tLocal('route_policy.mode_updated'));
         await fetchPolicy({ silent: true });
@@ -290,9 +339,41 @@ const RoutePolicyCard = ({ t }) => {
     }
   };
 
+  const handleGroupRouteToggle = async (groupKey, enabled) => {
+    if (!apiPaths.putGroupRoute) return;
+    const disabled = !enabled;
+    const prevGroups = groups;
+    setGroups((list) =>
+      list.map((g) =>
+        g.group_key === groupKey ? { ...g, route_disabled: disabled } : g,
+      ),
+    );
+    try {
+      const res = await API.put(apiPaths.putGroupRoute, {
+        group_key: groupKey,
+        disabled,
+      });
+      if (res.data.success) {
+        showSuccess(
+          disabled
+            ? tLocal('route_policy.group_route_disabled')
+            : tLocal('route_policy.group_route_enabled'),
+        );
+      } else {
+        showError(res.data.error || tLocal('route_policy.save_failed'));
+        setGroups(prevGroups);
+      }
+    } catch (err) {
+      showError(
+        err.response?.data?.error || tLocal('route_policy.save_failed'),
+      );
+      setGroups(prevGroups);
+    }
+  };
+
   const handleWeightChange = async (groupKey, channelID, weight, enabled, { quiet = false } = {}) => {
     try {
-      const res = await API.post('/api/user/route-policy/weights', {
+      const res = await API.post(apiPaths.postWeight, {
         group_key: groupKey,
         channel_id: channelID,
         weight,
@@ -337,7 +418,7 @@ const RoutePolicyCard = ({ t }) => {
 
   const handleDeleteWeight = async (weightID, { quiet = false } = {}) => {
     try {
-      const res = await API.delete(`/api/user/route-policy/weights/${weightID}`);
+      const res = await API.delete(apiPaths.deleteWeight(weightID));
       if (res.data.success) {
         if (!quiet) {
           showSuccess(tLocal('route_policy.weight_deleted'));
@@ -420,7 +501,7 @@ const RoutePolicyCard = ({ t }) => {
     }
     setAddingOverride(true);
     try {
-      const res = await API.post('/api/user/route-policy/overrides', {
+      const res = await API.post(apiPaths.postOverride, {
         raw_model: newOverrideModel.trim(),
         group_key: newOverrideGroup.trim(),
       });
@@ -441,7 +522,7 @@ const RoutePolicyCard = ({ t }) => {
 
   const handleDeleteOverride = async (overrideID) => {
     try {
-      const res = await API.delete(`/api/user/route-policy/overrides/${overrideID}`);
+      const res = await API.delete(apiPaths.deleteOverride(overrideID));
       if (res.data.success) {
         showSuccess(tLocal('route_policy.override_deleted'));
         fetchPolicy({ silent: true });
@@ -490,7 +571,9 @@ const RoutePolicyCard = ({ t }) => {
       width: '15%',
       render: (isUser) => (
         <Tag color={isUser ? 'blue' : 'grey'} size='small'>
-          {isUser ? tLocal('route_policy.my_override') : tLocal('route_policy.global_override')}
+          {isUser
+            ? tLocal('route_policy.my_override')
+            : tLocal('route_policy.global_override')}
         </Tag>
       ),
     },
@@ -498,22 +581,29 @@ const RoutePolicyCard = ({ t }) => {
       title: '',
       key: 'action',
       width: '15%',
-      render: (_, record) =>
-        record.is_user ? (
+      render: (_, record) => {
+        const canDelete = isAdminTemplate
+          ? !record.is_user
+          : Boolean(record.is_user);
+        if (!canDelete) return null;
+        return (
           <Button
             type='danger'
             size='small'
             icon={<Trash2 size={14} />}
             onClick={() => handleDeleteOverride(record.id)}
           />
-        ) : null,
+        );
+      },
     },
   ];
 
-  const allOverrides = [
-    ...userOverrides.map((o) => ({ ...o, is_user: true })),
-    ...globalOverrides.map((o) => ({ ...o, is_user: false })),
-  ];
+  const allOverrides = isAdminTemplate
+    ? globalOverrides.map((o) => ({ ...o, is_user: false }))
+    : [
+        ...userOverrides.map((o) => ({ ...o, is_user: true })),
+        ...globalOverrides.map((o) => ({ ...o, is_user: false })),
+      ];
 
   const modelIndex = useMemo(() => {
     const items = [];
@@ -560,19 +650,29 @@ const RoutePolicyCard = ({ t }) => {
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* Card Header */}
-      <div className='flex items-center mb-4'>
-        <Avatar size='small' color='green' className='mr-3 shadow-md'>
-          <Route size={16} />
-        </Avatar>
-        <div>
-          <Typography.Text className='text-lg font-medium'>
-            {tLocal('route_policy.title')}
-          </Typography.Text>
-          <div className='text-xs text-gray-600 dark:text-gray-400'>
-            {tLocal('route_policy.description')}
+      {!hideHeader && (
+        <div className='flex items-center mb-4'>
+          <Avatar size='small' color='green' className='mr-3 shadow-md'>
+            <Route size={16} />
+          </Avatar>
+          <div>
+            <Typography.Text className='text-lg font-medium'>
+              {isAdminTemplate
+                ? tLocal('route_policy.admin_template_title')
+                : isAdminUser
+                  ? tLocal('route_policy.admin_user_title')
+                  : tLocal('route_policy.title')}
+            </Typography.Text>
+            <div className='text-xs text-gray-600 dark:text-gray-400'>
+              {isAdminTemplate
+                ? tLocal('route_policy.admin_template_description')
+                : isAdminUser
+                  ? tLocal('route_policy.admin_user_description')
+                  : tLocal('route_policy.description')}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {loading ? (
         <div className='flex justify-center py-8'>
@@ -739,7 +839,29 @@ const RoutePolicyCard = ({ t }) => {
                         <Tag size='small' color='blue'>
                           {group.channel_count} {tLocal('route_policy.channels')}
                         </Tag>
+                        {group.route_disabled ? (
+                          <Tag size='small' color='orange'>
+                            {tLocal('route_policy.group_route_off_tag')}
+                          </Tag>
+                        ) : null}
                       </div>
+                      {canManageGroupRoute ? (
+                        <div
+                          className='flex items-center gap-2 shrink-0 ml-3'
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Typography.Text size='small' type='tertiary'>
+                            {tLocal('route_policy.group_route_switch')}
+                          </Typography.Text>
+                          <Switch
+                            checked={!group.route_disabled}
+                            onChange={(checked) =>
+                              handleGroupRouteToggle(group.group_key, checked)
+                            }
+                            aria-label={tLocal('route_policy.group_route_switch')}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                     <Collapsible isOpen={expandedGroups[group.group_key]}>
                       <div className='px-4 pb-3'>

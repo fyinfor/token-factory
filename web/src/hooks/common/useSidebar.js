@@ -66,6 +66,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     'model-heat': true,
     redemption: true,
     user: true,
+    admin_route_policy: true,
     subscription: true,
     'invoice-admin': true,
     'settlement-export': true,

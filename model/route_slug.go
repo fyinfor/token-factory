@@ -60,8 +60,19 @@ func IsValidRouteSlug(s string) bool {
 	return true
 }
 
+// IsLegacyChannelNoSuffix 是否为旧版 channel_no 形态（c1、c23…）。
+// 不能登记为 route_slug，但仍可能出现在 {model}/{suffix} 调用中，需按「指定后缀」解析以便剥后缀/回落。
+func IsLegacyChannelNoSuffix(s string) bool {
+	return channelNoRoutePattern.MatchString(strings.TrimSpace(s))
+}
+
+// IsRouteSuffixCandidate 判断最后一段是否应按「渠道路由后缀」解析（含合法 route_slug 与误用的 cN）。
+func IsRouteSuffixCandidate(s string) bool {
+	return IsValidRouteSlug(s) || IsLegacyChannelNoSuffix(s)
+}
+
 // ResolveChannelIDByRouteSlugAndModel 按 route_slug 查找已启用渠道，并校验 models 列表包含 modelName。
-// 未命中、已禁用或模型不在列表中时返回 0（供分发器静默降级为普通路由）。
+// 未命中、已禁用或模型不在列表中时返回 0。
 func ResolveChannelIDByRouteSlugAndModel(slug, modelName string) int {
 	ch := LookupChannelByRouteSlug(slug)
 	if ch == nil {

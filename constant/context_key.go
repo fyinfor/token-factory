@@ -55,11 +55,11 @@ const (
 	ContextKeyForcedChannelModelKey ContextKey = "forced_channel_model_key"
 
 	// ContextKeyPreferredChannelID 当用户通过 {model}/{route_slug} 指定偏好渠道时写入。
-	// 首跳优先该渠道；失败后可按同模型智能路由有序候选（价格/权重）保底重试，与硬指定 ForcedChannelID 不同。
+	// 智能路由开启：优先该渠道，失败可按同模型有序候选切换；路由关闭/操练场硬指定时配合 TokenSpecificChannelId 禁止切换。
 	ContextKeyPreferredChannelID ContextKey = "preferred_channel_id"
 
 	// ContextKeyNoFailover 当请求头 X-TF-No-Failover 为真时写入。
-	// 禁止渠道级重试/切换（含 route_slug 偏好后的有序保底切换），用于压测归因等场景。
+	// 禁止渠道级重试/切换，用于压测归因等场景。
 	ContextKeyNoFailover ContextKey = "no_failover"
 
 	// ContextKeyTFOpenUpstreamChannelRoute 仅当本地渠道类型为 TokenFactoryOpen(60)，且来自上游同步并
