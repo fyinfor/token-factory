@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -15,9 +16,13 @@ import (
 
 const kimiK3TextModelName = "kimi-k3"
 
-const kimiK3EmptyUserMessage = "Invalid request: the message at position 0 with role 'user' must not be empty"
+const kimiK3EmptyUserMessageFmt = "Invalid request: the message at position %d with role 'user' must not be empty"
 
 const kimiK3EmptyUserErrorType = "invalid_request_error"
+
+func kimiK3EmptyUserErrorMessage(position int) string {
+	return fmt.Sprintf(kimiK3EmptyUserMessageFmt, position)
+}
 
 type kimiK3EmptyUserErrorResponse struct {
 	Error kimiK3EmptyUserError `json:"error"`
@@ -39,41 +44,46 @@ func isKimiK3TextModel(model string) bool {
 	return model == kimiK3TextModelName
 }
 
-func kimiK3HasEmptyFirstUserMessage(req *dto.GeneralOpenAIRequest) bool {
-	if req == nil || len(req.Messages) == 0 {
-		return false
+func kimiK3EmptyUserMessageIndex(req *dto.GeneralOpenAIRequest) (int, bool) {
+	if req == nil {
+		return -1, false
 	}
-	msg := req.Messages[0]
-	if msg.Role != "user" {
-		return false
+	for i, msg := range req.Messages {
+		if msg.Role != "user" {
+			continue
+		}
+		content, ok := msg.Content.(string)
+		if ok && content == "" {
+			return i, true
+		}
 	}
-	content, ok := msg.Content.(string)
-	return ok && content == ""
+	return -1, false
 }
 
-func shouldRejectKimiK3EmptyUser(c *gin.Context, request dto.Request) bool {
+func shouldRejectKimiK3EmptyUser(c *gin.Context, request dto.Request) (int, bool) {
 	textReq, ok := request.(*dto.GeneralOpenAIRequest)
 	if !ok || textReq == nil {
-		return false
+		return -1, false
 	}
 	originModel := ""
 	if c != nil {
 		originModel = common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
 	}
 	if !isKimiK3TextModel(textReq.Model) && !isKimiK3TextModel(originModel) {
-		return false
+		return -1, false
 	}
-	return kimiK3HasEmptyFirstUserMessage(textReq)
+	return kimiK3EmptyUserMessageIndex(textReq)
 }
 
-// AbortIfKimiK3EmptyUser 命中 kimi-k3 首条 user 空 content 时写入固定 400 并返回 true。
+// AbortIfKimiK3EmptyUser 命中 kimi-k3 任意 user 空 content 时写入固定 400 并返回 true。
 func AbortIfKimiK3EmptyUser(c *gin.Context, request dto.Request) bool {
-	if !shouldRejectKimiK3EmptyUser(c, request) {
+	position, hit := shouldRejectKimiK3EmptyUser(c, request)
+	if !hit {
 		return false
 	}
 	c.AbortWithStatusJSON(http.StatusBadRequest, kimiK3EmptyUserErrorResponse{
 		Error: kimiK3EmptyUserError{
-			Message: kimiK3EmptyUserMessage,
+			Message: kimiK3EmptyUserErrorMessage(position),
 			Type:    kimiK3EmptyUserErrorType,
 		},
 	})
