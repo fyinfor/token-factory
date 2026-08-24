@@ -1,12 +1,17 @@
 package doubao
 
 import (
+	"bytes"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -357,4 +362,68 @@ func TestConvertToOpenAIVideo_ResultSummaryNestedVideoURL(t *testing.T) {
 	usage, ok := got["usage"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, float64(38830), usage["total_tokens"])
+}
+
+func TestDoResponse_ContentsGenerationsSubmitReturnsIDOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", nil)
+
+	upstream := io.NopCloser(bytes.NewReader([]byte(`{"id":"cgt-upstream-1"}`)))
+	resp := &http.Response{StatusCode: http.StatusOK, Body: upstream}
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "cgt-public-1"},
+		ChannelMeta:   &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeSeedance},
+	}
+	a := &TaskAdaptor{ChannelType: constant.ChannelTypeSeedance}
+	taskID, _, taskErr := a.DoResponse(c, resp, info)
+	require.Nil(t, taskErr)
+	assert.Equal(t, "cgt-upstream-1", taskID)
+
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, "cgt-public-1", got["id"])
+	_, hasObject := got["object"]
+	assert.False(t, hasObject)
+}
+
+func TestBuildRequestBody_ContentsGenerationsKeepsOfficialContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{
+		"model": "Seedance 2.0",
+		"prompt": "网关校验用",
+		"content": [
+			{"type": "text", "text": "官方文案"},
+			{"type": "image_url", "image_url": {"url": "https://x.png"}, "role": "first_frame"}
+		],
+		"resolution": "720p",
+		"duration": 5
+	}`)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType:       constant.ChannelTypeSeedance,
+			UpstreamModelName: "doubao-seedance-2-0-260128",
+		},
+	}
+	info.IsModelMapped = true
+	a := &TaskAdaptor{ChannelType: constant.ChannelTypeSeedance}
+	reader, err := a.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	out, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(out, &got))
+	assert.Equal(t, "doubao-seedance-2-0-260128", got["model"])
+	_, hasPrompt := got["prompt"]
+	assert.False(t, hasPrompt)
+	content, ok := got["content"].([]any)
+	require.True(t, ok)
+	require.Len(t, content, 2)
+	first := content[1].(map[string]any)
+	assert.Equal(t, "first_frame", first["role"])
 }

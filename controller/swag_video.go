@@ -40,6 +40,23 @@ func VideoGenerations(c *gin.Context) {
 func VideoGenerationsTaskId(c *gin.Context) {
 }
 
+// ContentsGenerationsTasks
+// @Summary 创建视频任务（火山方舟 Contents API）
+// @Description 与官方 POST /api/v3/contents/generations/tasks 对齐的任务创建入口；请求体为火山方舟 content[] 形态，回包为 {"id":"..."}。旧接口 POST /v1/video/generations 仍可用。
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "用户认证令牌 (Bearer sk-xxxx)"
+// @Param request body object true "火山方舟 Contents 创建任务请求"
+// @Success 200 {object} map[string]interface{} "任务 ID"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "无权限"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v3/contents/generations/tasks [post]
+func ContentsGenerationsTasks(c *gin.Context) {
+}
+
 // ContentsGenerationsTaskId
 // @Summary 查询视频（火山方舟 Contents API）
 // @Description 与官方 GET /api/v3/contents/generations/tasks/{task_id} 对齐的任务查询入口；旧接口 GET /v1/video/generations/{task_id} 仍可用。
