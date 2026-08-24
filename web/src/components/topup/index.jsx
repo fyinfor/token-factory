@@ -28,6 +28,8 @@ import {
   renderQuotaWithAmount,
   copy,
   getQuotaPerUnit,
+  isHostedCheckoutPayMethod,
+  isPayMethodUnavailable,
 } from '../../helpers';
 import { Modal, Toast, Button } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
@@ -103,6 +105,7 @@ const TopUp = () => {
   const [enableStripeTopUp, setEnableStripeTopUp] = useState(
     statusState?.status?.enable_stripe_topup || false,
   );
+  const [enableAntomTopUp, setEnableAntomTopUp] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
   const [rechargeDisplayCurrency, setRechargeDisplayCurrency] = useState('USD');
 
@@ -301,6 +304,11 @@ const TopUp = () => {
         showError(t('管理员未开启Stripe充值！'));
         return;
       }
+    } else if (payment === 'antom') {
+      if (!enableAntomTopUp) {
+        showError(t('管理员未开启 Antom 充值！'));
+        return;
+      }
     } else {
       if (!enableOnlineTopUp) {
         showError(t('管理员未开启在线充值！'));
@@ -314,6 +322,8 @@ const TopUp = () => {
     try {
       if (payment === 'stripe') {
         await getStripeAmount(count);
+      } else if (payment === 'antom') {
+        await getAntomAmount(count);
       } else {
         await getAmount(count);
       }
@@ -322,7 +332,7 @@ const TopUp = () => {
         showError(t('充值数量不能小于') + minTopUp);
         return;
       }
-      if (payment !== 'stripe') {
+      if (!isHostedCheckoutPayMethod(payment)) {
         const maxTopUp = getPayMethodMaxTopup(payMethods, payment);
         if (maxTopUp > 0 && Number(count) > maxTopUp) {
           showError(t('充值数量不能大于') + maxTopUp);
@@ -340,12 +350,14 @@ const TopUp = () => {
 
   const onlineTopUp = async () => {
     if (payWay === 'stripe') {
-      // Stripe 支付处理
       if (amount === 0) {
         await getStripeAmount();
       }
+    } else if (payWay === 'antom') {
+      if (amount === 0) {
+        await getAntomAmount();
+      }
     } else {
-      // 普通支付处理
       if (amount === 0) {
         await getAmount();
       }
@@ -355,7 +367,7 @@ const TopUp = () => {
       showError('充值数量不能小于' + minTopUp);
       return;
     }
-    if (payWay !== 'stripe') {
+    if (!isHostedCheckoutPayMethod(payWay)) {
       const maxTopUp = getPayMethodMaxTopup(payMethods, payWay);
       if (maxTopUp > 0 && Number(topUpCount) > maxTopUp) {
         showError(t('充值数量不能大于') + maxTopUp);
@@ -366,13 +378,16 @@ const TopUp = () => {
     try {
       let res;
       if (payWay === 'stripe') {
-        // Stripe 支付请求
         res = await API.post('/api/user/stripe/pay', {
           amount: parseFloat(topUpCount),
           payment_method: 'stripe',
         });
+      } else if (payWay === 'antom') {
+        res = await API.post('/api/user/antom/pay', {
+          amount: parseFloat(topUpCount),
+          payment_method: 'antom',
+        });
       } else {
-        // 普通支付请求
         res = await API.post('/api/user/pay', {
           amount: parseFloat(topUpCount),
           payment_method: payWay,
@@ -382,8 +397,7 @@ const TopUp = () => {
       if (res !== undefined) {
         const { message, data } = res.data;
         if (message === 'success') {
-          if (payWay === 'stripe') {
-            // Stripe 支付回调处理
+          if (isHostedCheckoutPayMethod(payWay)) {
             window.open(data.pay_link, '_blank');
           } else {
             // 普通支付表单提交
@@ -693,9 +707,18 @@ const TopUp = () => {
                   method.min_topup = stripeMin;
                 }
               }
+              if (
+                method.type === 'antom' &&
+                (!method.min_topup || method.min_topup <= 0)
+              ) {
+                const antomMin = Number(data.antom_min_topup);
+                if (Number.isFinite(antomMin)) {
+                  method.min_topup = antomMin;
+                }
+              }
 
               if (!method.color) {
-                if (method.type === 'alipay') {
+                if (method.type === 'alipay' || method.type === 'antom') {
                   method.color = 'rgba(var(--semi-blue-5), 1)';
                 } else if (method.type === 'wxpay') {
                   method.color = 'rgba(var(--semi-green-5), 1)';
@@ -716,19 +739,23 @@ const TopUp = () => {
 
           setPayMethods(payMethods);
           const enableStripeTopUp = data.enable_stripe_topup || false;
+          const enableAntomTopUp = data.enable_antom_topup || false;
           const enableOnlineTopUp = data.enable_online_topup || false;
           const enableCreemTopUp = data.enable_creem_topup || false;
           const minTopUpValue = enableOnlineTopUp
             ? data.min_topup
             : enableStripeTopUp
               ? data.stripe_min_topup
-              : data.enable_waffo_topup
-                ? data.waffo_min_topup
-                : data.enable_ubcoin_topup
-                  ? data.ubcoin_min_topup
-                  : 1;
+              : enableAntomTopUp
+                ? data.antom_min_topup
+                : data.enable_waffo_topup
+                  ? data.waffo_min_topup
+                  : data.enable_ubcoin_topup
+                    ? data.ubcoin_min_topup
+                    : 1;
           setEnableOnlineTopUp(enableOnlineTopUp);
           setEnableStripeTopUp(enableStripeTopUp);
+          setEnableAntomTopUp(enableAntomTopUp);
           setEnableCreemTopUp(enableCreemTopUp);
           const enableWaffoTopUp = data.enable_waffo_topup || false;
           setEnableWaffoTopUp(enableWaffoTopUp);
@@ -953,6 +980,35 @@ const TopUp = () => {
     }
   };
 
+  const getAntomAmount = async (value) => {
+    if (value === undefined) {
+      value = topUpCount;
+    }
+    setAmountLoading(true);
+    try {
+      const res = await API.post('/api/user/antom/amount', {
+        amount: parseFloat(value),
+      });
+      if (res !== undefined) {
+        const { message, data } = res.data;
+        if (message === 'success') {
+          applyTopupQuote(data, data?.pay_currency || 'CNY');
+        } else {
+          setAmount(0);
+          setQuoteQuotaToAdd(0);
+          setQuoteChargedUsd(0);
+          Toast.error({ content: '错误：' + data, id: 'getAmount' });
+        }
+      } else {
+        showError(res);
+      }
+    } catch (err) {
+      // amount fetch failed silently
+    } finally {
+      setAmountLoading(false);
+    }
+  };
+
   const handleCancel = () => {
     setOpen(false);
   };
@@ -1035,10 +1091,12 @@ const TopUp = () => {
       }
       const minTopupVal = Number(method.min_topup) || 0;
       const maxTopupVal = Number(method.max_topup) || 0;
-      const isStripe = method.type === 'stripe';
       const disabled =
-        (!enableOnlineTopUp && !isStripe) ||
-        (!enableStripeTopUp && isStripe) ||
+        isPayMethodUnavailable(method.type, {
+          enableOnlineTopUp,
+          enableStripeTopUp,
+          enableAntomTopUp,
+        }) ||
         minTopupVal > Number(count || 0) ||
         (maxTopupVal > 0 && maxTopupVal < Number(count || 0));
       return !disabled;
@@ -1108,6 +1166,7 @@ const TopUp = () => {
         payMethods={payMethods}
         enableOnlineTopUp={enableOnlineTopUp}
         enableStripeTopUp={enableStripeTopUp}
+        enableAntomTopUp={enableAntomTopUp}
         onSelect={handlePaymentMethodSelect}
         activePaymentKey={activePaymentKey}
       />
@@ -1216,6 +1275,7 @@ const TopUp = () => {
           t={t}
           enableOnlineTopUp={enableOnlineTopUp}
           enableStripeTopUp={enableStripeTopUp}
+          enableAntomTopUp={enableAntomTopUp}
           enableCreemTopUp={enableCreemTopUp}
           creemProducts={creemProducts}
           creemPreTopUp={creemPreTopUp}

@@ -167,6 +167,11 @@ export const SETTING_CATEGORIES = [
           'Webhook',
           '促销码',
         ]),
+        settingItem('antom', 'payment', 'antom', 'Antom 收银台', [
+          'Antom',
+          '支付宝',
+          '收银台',
+        ]),
         settingItem('creem', 'payment', 'creem', 'Creem 设置', [
           'Creem',
           '产品配置',

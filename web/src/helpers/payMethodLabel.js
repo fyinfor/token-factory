@@ -24,6 +24,7 @@ const PAYMENT_METHOD_TYPE_LABEL_KEYS = {
   alipay: '支付宝',
   wxpay: '微信',
   stripe: 'Stripe',
+  antom: 'Antom 收银台',
   waffo: 'Waffo (Global Payment)',
   paypal: 'PayPal',
   creem: 'Creem',
@@ -39,6 +40,7 @@ const PAYMENT_METHOD_NAME_LABEL_KEYS = {
   自定义2: '自定义2',
   自定义3: '自定义3',
   Stripe: 'Stripe',
+  'Antom 收银台': 'Antom 收银台',
   'Waffo (Global Payment)': 'Waffo (Global Payment)',
   PayPal: 'PayPal',
   Creem: 'Creem',
@@ -162,4 +164,17 @@ export function formatTopupCreditedAmount(money, record = {}, usdExchangeRate) {
     return renderQuota(quotaToAdd);
   }
   return formatTopupPayMoney(money, record, usdExchangeRate);
+}
+
+export function isHostedCheckoutPayMethod(type) {
+  return type === 'stripe' || type === 'antom';
+}
+
+export function isPayMethodUnavailable(
+  type,
+  { enableOnlineTopUp, enableStripeTopUp, enableAntomTopUp },
+) {
+  if (type === 'stripe') return !enableStripeTopUp;
+  if (type === 'antom') return !enableAntomTopUp;
+  return !enableOnlineTopUp;
 }
