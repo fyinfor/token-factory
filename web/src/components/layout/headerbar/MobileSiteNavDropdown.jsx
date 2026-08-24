@@ -26,8 +26,8 @@ import { isAdmin, userIsSupplierUser } from '../../../helpers/appBasics';
 
 /** 主站入口顺序（与桌面顶栏一致） */
 const PRIMARY_NAV_KEYS = [
-  'compute',
   'home',
+  'compute',
   'pricing',
   'rankings',
   'docs',

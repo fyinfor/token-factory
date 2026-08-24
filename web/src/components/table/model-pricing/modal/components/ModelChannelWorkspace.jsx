@@ -763,8 +763,8 @@ const ModelChannelWorkspace = ({
   };
 
   return (
-    <div className='model-channel-workspace grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[230px_minmax(0,1fr)] md:grid-rows-1'>
-      <aside className='channel-selector-pane max-h-64 min-h-0 overflow-y-auto overscroll-contain border-b p-3 md:h-full md:max-h-none md:border-b-0 md:border-r'>
+    <div className='model-channel-workspace grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[280px_minmax(0,1fr)] md:grid-rows-1'>
+      <aside className='channel-selector-pane scrollbar-hide max-h-64 min-h-0 overflow-y-auto overscroll-contain border-b p-3 md:h-full md:max-h-none md:border-b-0 md:border-r'>
         <div className='space-y-2'>
           {channelList.map((channel, index) => {
             const key = getChannelKey(channel, index);

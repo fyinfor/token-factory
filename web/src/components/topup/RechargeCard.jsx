@@ -52,7 +52,7 @@ import {
 } from 'lucide-react';
 import { IconGift } from '@douyinfe/semi-icons';
 import { getCurrencyConfig } from '../../helpers/render';
-import { getPayMethodDisplayName } from '../../helpers';
+import { getPayMethodDisplayName, isPayMethodUnavailable } from '../../helpers';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 import './preset-amount-card.css';
 
@@ -66,6 +66,7 @@ const payBtnClass = '!rounded-lg !px-4 !py-2';
 function renderPayMethodIcon(payMethod) {
   switch (payMethod.type) {
     case 'alipay':
+    case 'antom':
       return <AlipayPayLogo size={28} />;
     case 'wxpay':
       return <WeChatPayLogo size={28} />;
@@ -92,6 +93,8 @@ function getPayMethodLabel(payMethod, t) {
       return t('微信');
     case 'stripe':
       return 'Stripe';
+    case 'antom':
+      return t('Antom 收银台');
     case 'paypal':
       return 'PayPal';
     default:
@@ -122,6 +125,7 @@ const RechargeCard = ({
   t,
   enableOnlineTopUp,
   enableStripeTopUp,
+  enableAntomTopUp,
   enableCreemTopUp,
   creemProducts,
   creemPreTopUp,
@@ -295,6 +299,7 @@ const RechargeCard = ({
           </div>
         ) : enableOnlineTopUp ||
           enableStripeTopUp ||
+          enableAntomTopUp ||
           enableCreemTopUp ||
           enableWaffoTopUp ||
           enableUcoinTopUp ? (
@@ -305,6 +310,7 @@ const RechargeCard = ({
             <div className='space-y-6'>
               {(enableOnlineTopUp ||
                 enableStripeTopUp ||
+                enableAntomTopUp ||
                 enableWaffoTopUp ||
                 enableUcoinTopUp) && (
                 <Row gutter={12}>
@@ -315,6 +321,7 @@ const RechargeCard = ({
                       disabled={
                         !enableOnlineTopUp &&
                         !enableStripeTopUp &&
+                        !enableAntomTopUp &&
                         !enableWaffoTopUp &&
                         !enableUcoinTopUp
                       }
@@ -361,14 +368,16 @@ const RechargeCard = ({
                                   Number(payMethod.min_topup) || 0;
                                 const maxTopupVal =
                                   Number(payMethod.max_topup) || 0;
-                                const isStripe = payMethod.type === 'stripe';
                                 const countVal = Number(topUpCount || 0);
                                 const belowMin = minTopupVal > countVal;
                                 const aboveMax =
                                   maxTopupVal > 0 && maxTopupVal < countVal;
                                 const disabled =
-                                  (!enableOnlineTopUp && !isStripe) ||
-                                  (!enableStripeTopUp && isStripe) ||
+                                  isPayMethodUnavailable(payMethod.type, {
+                                    enableOnlineTopUp,
+                                    enableStripeTopUp,
+                                    enableAntomTopUp,
+                                  }) ||
                                   belowMin ||
                                   aboveMax;
 
@@ -451,6 +460,7 @@ const RechargeCard = ({
 
               {(enableOnlineTopUp ||
                 enableStripeTopUp ||
+                enableAntomTopUp ||
                 enableWaffoTopUp ||
                 enableUcoinTopUp) && (
                 <Form.Slot

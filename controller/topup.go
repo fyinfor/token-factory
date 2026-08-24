@@ -56,6 +56,24 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	if setting.AntomConfigured() {
+		hasAntom := false
+		for _, method := range payMethods {
+			if method["type"] == "antom" {
+				hasAntom = true
+				break
+			}
+		}
+		if !hasAntom {
+			payMethods = append(payMethods, map[string]string{
+				"name":      "Antom 收银台",
+				"type":      "antom",
+				"color":     "rgba(var(--semi-blue-5), 1)",
+				"min_topup": strconv.Itoa(setting.AntomMinTopUp),
+			})
+		}
+	}
+
 	// 如果启用了 Waffo 支付，添加到支付方法列表
 	enableWaffo := setting.WaffoEnabled &&
 		((!setting.WaffoSandbox &&
@@ -104,6 +122,7 @@ func GetTopUpInfo(c *gin.Context) {
 				operation_setting.EpayId != "" &&
 				operation_setting.EpayKey != ""),
 		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "",
+		"enable_antom_topup":  setting.AntomConfigured(),
 		"enable_creem_topup":  setting.CreemApiKey != "" && setting.CreemProducts != "[]",
 		"enable_waffo_topup":  enableWaffo,
 		"waffo_pay_methods": func() interface{} {
@@ -116,6 +135,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"pay_methods":         payMethods,
 		"min_topup":           operation_setting.MinTopUp,
 		"stripe_min_topup":    setting.StripeMinTopUp,
+		"antom_min_topup":     setting.AntomMinTopUp,
 		"waffo_min_topup":     setting.WaffoMinTopUp,
 		"enable_ubcoin_topup": enableUcoin,
 		"ubcoin_min_topup":    setting.UcoinMinTopUp,
