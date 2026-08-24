@@ -1,6 +1,7 @@
 package model
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ func InitOptionMap() {
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
 	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
-	common.OptionMap[modelConsumptionDistributionMultiplierKey] = strconv.Itoa(defaultModelConsumptionDistributionMultiplier)
+	common.OptionMap[modelConsumptionDistributionMultiplierKey] = strconv.FormatFloat(defaultModelConsumptionDistributionMultiplier, 'f', -1, 64)
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
@@ -328,14 +329,14 @@ func InitOptionMap() {
 func ensureModelConsumptionDistributionMultiplierOption() error {
 	option := Option{Key: modelConsumptionDistributionMultiplierKey}
 	return DB.Where(&Option{Key: modelConsumptionDistributionMultiplierKey}).
-		Attrs(Option{Value: strconv.Itoa(defaultModelConsumptionDistributionMultiplier)}).
+		Attrs(Option{Value: strconv.FormatFloat(defaultModelConsumptionDistributionMultiplier, 'f', -1, 64)}).
 		FirstOrCreate(&option).Error
 }
 
 // GetModelConsumptionDistributionMultiplier reads the global display-only
 // multiplier directly from the database so manual option updates take effect
 // on the next dashboard refresh. Missing or invalid values use the default.
-func GetModelConsumptionDistributionMultiplier() (int, error) {
+func GetModelConsumptionDistributionMultiplier() (float64, error) {
 	var option Option
 	result := DB.Select("value").Where(&Option{Key: modelConsumptionDistributionMultiplierKey}).Limit(1).Find(&option)
 	if result.Error != nil {
@@ -344,8 +345,8 @@ func GetModelConsumptionDistributionMultiplier() (int, error) {
 	if result.RowsAffected == 0 {
 		return defaultModelConsumptionDistributionMultiplier, nil
 	}
-	multiplier, err := strconv.Atoi(strings.TrimSpace(option.Value))
-	if err != nil || multiplier <= 0 {
+	multiplier, err := strconv.ParseFloat(strings.TrimSpace(option.Value), 64)
+	if err != nil || multiplier <= 0 || math.IsNaN(multiplier) || math.IsInf(multiplier, 0) {
 		return defaultModelConsumptionDistributionMultiplier, nil
 	}
 	return multiplier, nil
