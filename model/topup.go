@@ -387,6 +387,79 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 	return nil
 }
 
+// RechargeAntom 按 Antom notifyPayment 完成充值，校验渠道、金额和币种。
+func RechargeAntom(referenceId string, paidMoney float64, currency string) (err error) {
+	if referenceId == "" {
+		return errors.New("未提供支付单号")
+	}
+	if paidMoney <= 0 {
+		return errors.New("无效的支付金额")
+	}
+
+	var quota int
+	topUp := &TopUp{}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", referenceId).First(topUp).Error
+		if err != nil {
+			return errors.New("充值订单不存在")
+		}
+		if topUp.Status != common.TopUpStatusPending {
+			return errors.New("充值订单状态错误")
+		}
+		if topUp.PaymentMethod != "antom" {
+			return fmt.Errorf("支付渠道不匹配: expect antom, got %s", topUp.PaymentMethod)
+		}
+
+		expectCur := strings.ToUpper(strings.TrimSpace(topUp.PayCurrency))
+		if expectCur == "" {
+			expectCur = "CNY"
+		}
+		if strings.ToUpper(strings.TrimSpace(currency)) != expectCur {
+			return errors.New("不支持的支付币种")
+		}
+
+		expectedMoney := decimal.NewFromFloat(topUp.Money)
+		actualMoney := decimal.NewFromFloat(paidMoney)
+		diff := expectedMoney.Sub(actualMoney).Abs()
+		if diff.GreaterThan(decimal.NewFromFloat(0.01)) {
+			return fmt.Errorf("支付金额不匹配: expect %s, got %s", expectedMoney.StringFixed(2), actualMoney.StringFixed(2))
+		}
+
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		err = tx.Save(topUp).Error
+		if err != nil {
+			return err
+		}
+
+		quota = topUp.ResolveQuotaToAdd()
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
+		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quota)).Error
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		common.SysError(fmt.Sprintf("antom topup verify failed, trade_no=%s, currency=%s, paid=%.2f, err=%s", referenceId, strings.ToUpper(strings.TrimSpace(currency)), paidMoney, err.Error()))
+		return errors.New("充值失败，请稍后重试")
+	}
+
+	RecordLog(topUp.UserId, LogTypeTopup, FormatTopUpSuccessUserLog("", topUp))
+	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
+	return nil
+}
+
 // topUpStatusFilterQuery 为充值列表查询追加 status 条件；空字符串或非法值不追加。
 // 列名需带表前缀：管理员列表可能 JOIN users，两侧均有 status。
 func topUpStatusFilterQuery(db *gorm.DB, status string) *gorm.DB {

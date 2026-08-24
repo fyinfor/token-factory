@@ -86,7 +86,8 @@ const PaymentConfirmModal = ({
                   if (payMethod) {
                     return (
                       <>
-                        {payMethod.type === 'alipay' ? (
+                        {payMethod.type === 'alipay' ||
+                        payMethod.type === 'antom' ? (
                           <span className='mr-2 inline-flex'>
                             <AlipayPayLogo size={18} />
                           </span>
@@ -124,6 +125,17 @@ const PaymentConfirmModal = ({
                           </span>
                           <Text className='text-slate-900 dark:text-slate-100'>
                             {t('支付宝')}
+                          </Text>
+                        </>
+                      );
+                    } else if (payWay === 'antom') {
+                      return (
+                        <>
+                          <span className='mr-2 inline-flex'>
+                            <AlipayPayLogo size={18} />
+                          </span>
+                          <Text className='text-slate-900 dark:text-slate-100'>
+                            {t('Antom 收银台')}
                           </Text>
                         </>
                       );

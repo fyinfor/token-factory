@@ -143,6 +143,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		apiRouter.POST("/stripe/webhook", controller.StripeWebhook)
+		apiRouter.POST("/antom/notify", controller.AntomNotify)
 		apiRouter.POST("/creem/webhook", controller.CreemWebhook)
 		apiRouter.POST("/waffo/webhook", controller.WaffoWebhook)
 
@@ -218,6 +219,8 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/amount", controller.RequestAmount)
 				selfRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), middleware.RequireRealNameVerificationForTopUp(), controller.RequestStripePay)
 				selfRoute.POST("/stripe/amount", controller.RequestStripeAmount)
+				selfRoute.POST("/antom/pay", middleware.CriticalRateLimit(), middleware.RequireRealNameVerificationForTopUp(), controller.RequestAntomPay)
+				selfRoute.POST("/antom/amount", controller.RequestAntomAmount)
 				selfRoute.POST("/creem/pay", middleware.CriticalRateLimit(), middleware.RequireRealNameVerificationForTopUp(), controller.RequestCreemPay)
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), middleware.RequireRealNameVerificationForTopUp(), controller.RequestWaffoPay)
 				selfRoute.POST("/ubcoin/pay", middleware.CriticalRateLimit(), middleware.RequireRealNameVerificationForTopUp(), controller.RequestUcoinPay)

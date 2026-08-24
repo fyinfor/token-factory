@@ -26,9 +26,13 @@ import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants
 import { showError, showSuccess } from '../../helpers';
 import {
   appendUploadedMediaUrl,
-  canAddMoreMediaUrls,
+  canAcceptMoreMediaUrls,
+  canAddMediaUrlRow,
+  countFilledMediaUrls,
+  isUnlimitedMediaCount,
   uploadPlaygroundMediaFile,
 } from '../../helpers/playgroundMediaInputUtils';
+import PlaygroundMediaThumb from './PlaygroundMediaThumb';
 
 const ImageUrlInput = ({
   imageUrls,
@@ -36,27 +40,36 @@ const ImageUrlInput = ({
   onImageUrlsChange,
   disabled = false,
   maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
+  title,
+  extraHeader = null,
+  hint = '',
+  showCount = false,
+  countUnit,
+  placeholder,
 }) => {
   const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
-
-  const canAddMore = canAddMoreMediaUrls(imageUrls, maxCount);
+  const list = imageUrls?.length ? imageUrls : [''];
+  const filledCount = countFilledMediaUrls(list);
+  const canAddRow = canAddMediaUrlRow(list, maxCount);
+  const canAcceptMore = canAcceptMoreMediaUrls(list, maxCount);
+  const unlimited = isUnlimitedMediaCount(maxCount);
 
   const handleAddImageUrl = () => {
-    if (!canAddMore) {
+    if (!canAddRow) {
       return;
     }
-    onImageUrlsChange([...(imageUrls || []), '']);
+    onImageUrlsChange([...list, '']);
   };
 
   const handleUpdateImageUrl = (index, value) => {
-    const newUrls = [...imageUrls];
+    const newUrls = [...list];
     newUrls[index] = value;
     onImageUrlsChange(newUrls);
   };
 
   const handleRemoveImageUrl = (index) => {
-    const newUrls = imageUrls.filter((_, i) => i !== index);
+    const newUrls = list.filter((_, i) => i !== index);
     onImageUrlsChange(newUrls.length > 0 ? newUrls : ['']);
   };
 
@@ -68,11 +81,13 @@ const ImageUrlInput = ({
         return;
       }
 
-      if (!canAddMoreMediaUrls(imageUrls, maxCount)) {
+      if (!canAcceptMoreMediaUrls(imageUrls, maxCount)) {
         showError(
-          t('操练场素材已达上限', '最多添加 {{count}} 个', {
-            count: maxCount,
-          }),
+          unlimited
+            ? t('无法继续添加素材')
+            : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                count: maxCount,
+              }),
         );
         onError?.(new Error('limit'));
         return;
@@ -88,9 +103,11 @@ const ImageUrlInput = ({
         );
         if (!ok) {
           showError(
-            t('操练场素材已达上限', '最多添加 {{count}} 个', {
-              count: maxCount,
-            }),
+            unlimited
+              ? t('无法继续添加素材')
+              : t('操练场素材已达上限', '最多添加 {{count}} 个', {
+                  count: maxCount,
+                }),
           );
           onError?.(new Error('limit'));
           return;
@@ -109,8 +126,18 @@ const ImageUrlInput = ({
         setUploading(false);
       }
     },
-    [imageUrls, maxCount, onImageUrlsChange, t],
+    [imageUrls, maxCount, onImageUrlsChange, t, unlimited],
   );
+
+  const resolvePlaceholder = (index) => {
+    if (typeof placeholder === 'function') {
+      return placeholder(index);
+    }
+    if (placeholder) {
+      return placeholder;
+    }
+    return `https://example.com/image${index + 1}.jpg`;
+  };
 
   return (
     <div
@@ -127,7 +154,7 @@ const ImageUrlInput = ({
             }
           />
           <Typography.Text strong className='text-sm'>
-            {t('图片地址')}
+            {title || t('图片地址')}
           </Typography.Text>
           {disabled && (
             <Typography.Text className='text-xs text-[var(--semi-color-warning)]'>
@@ -141,7 +168,7 @@ const ImageUrlInput = ({
             accept='image/*,.jpg,.jpeg,.png,.gif,.webp'
             showUploadList={false}
             customRequest={handleUpload}
-            disabled={!imageEnabled || disabled || uploading || !canAddMore}
+            disabled={!imageEnabled || disabled || uploading || !canAcceptMore}
           >
             <Button
               icon={
@@ -154,7 +181,7 @@ const ImageUrlInput = ({
               size='small'
               theme='light'
               className='playground-media-action !rounded-lg'
-              disabled={!imageEnabled || disabled || uploading || !canAddMore}
+              disabled={!imageEnabled || disabled || uploading || !canAcceptMore}
             >
               {uploading ? t('上传中') : t('上传')}
             </Button>
@@ -166,19 +193,40 @@ const ImageUrlInput = ({
             type='primary'
             onClick={handleAddImageUrl}
             className='playground-media-action-round'
-            disabled={!imageEnabled || disabled || !canAddMore}
+            disabled={!imageEnabled || disabled || !canAddRow}
           />
         </div>
       </div>
 
+      {extraHeader ? <div className='mb-2'>{extraHeader}</div> : null}
+
+      {hint ? (
+        <Typography.Text className='mb-2 block text-xs text-[var(--semi-color-text-2)]'>
+          {hint}
+        </Typography.Text>
+      ) : null}
+
+      {showCount && imageEnabled && list.length > 0 ? (
+        <Typography.Text className='mb-2 block text-xs text-[var(--semi-color-text-2)]'>
+          {t('已添加')}{' '}
+          {unlimited ? filledCount : `${filledCount}/${maxCount}`}{' '}
+          {countUnit || t('张图片')}
+        </Typography.Text>
+      ) : null}
+
       <div
-        className={`space-y-2 max-h-32 overflow-y-auto image-list-scroll ${!imageEnabled || disabled ? 'opacity-50' : ''}`}
+        className={`space-y-2 max-h-52 overflow-y-auto image-list-scroll ${!imageEnabled || disabled ? 'opacity-50' : ''}`}
       >
-        {imageUrls.map((url, index) => (
+        {list.map((url, index) => (
           <div key={index} className='flex items-center gap-2'>
-            <div className='flex-1'>
+            <PlaygroundMediaThumb
+              value={url}
+              kind='image'
+              disabled={!imageEnabled || disabled}
+            />
+            <div className='min-w-0 flex-1'>
               <Input
-                placeholder={`https://example.com/image${index + 1}.jpg`}
+                placeholder={resolvePlaceholder(index)}
                 value={url}
                 onChange={(value) => handleUpdateImageUrl(index, value)}
                 className='!rounded-lg'

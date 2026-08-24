@@ -126,6 +126,32 @@ func TestParseTaskResult_Format2WrappedCompletionTokens(t *testing.T) {
 	assert.Equal(t, 191254, ti.CompletionTokens)
 }
 
+func TestParseTaskResult_ResultSummaryNestedVideoURL(t *testing.T) {
+	a := &TaskAdaptor{}
+	body := []byte(`{
+		"id": "01a0231f-ace7-7c3f-a7ec-02f8f6dea411",
+		"upstreamTaskId": "cgt-20260821150113-fh2fm",
+		"status": "succeeded",
+		"model": "doubao-seedance-2-5-260628",
+		"resultSummary": {
+			"content": {"video_url": "https://example.com/seedance.mp4"},
+			"duration": "4",
+			"resolution": "480p",
+			"upstreamStatus": "succeeded",
+			"usage": {"completion_tokens": 38830, "total_tokens": 38830}
+		}
+	}`)
+	ti, err := a.ParseTaskResult(body)
+	require.NoError(t, err)
+	require.NotNil(t, ti)
+	assert.Equal(t, string(model.TaskStatusSuccess), ti.Status)
+	assert.Equal(t, "https://example.com/seedance.mp4", ti.Url)
+	assert.Equal(t, 4, ti.Duration)
+	assert.Equal(t, "480p", ti.Resolution)
+	assert.Equal(t, 38830, ti.TotalTokens)
+	assert.Equal(t, 38830, ti.CompletionTokens)
+}
+
 func TestParseTaskResult_Format2MissingKeysDoesNotPanic(t *testing.T) {
 	a := &TaskAdaptor{}
 	body := []byte(`{"code":"success","data":{"task_id":"t1","status":"RUNNING","progress":"30%","data":{}}}`)

@@ -136,6 +136,14 @@ func InitOptionMap() {
 	common.OptionMap["StripePriceId"] = setting.StripePriceId
 	common.OptionMap["StripeUnitPrice"] = strconv.FormatFloat(setting.StripeUnitPrice, 'f', -1, 64)
 	common.OptionMap["StripePromotionCodesEnabled"] = strconv.FormatBool(setting.StripePromotionCodesEnabled)
+	common.OptionMap["AntomClientId"] = setting.AntomClientId
+	common.OptionMap["AntomMerchantPrivateKey"] = setting.AntomMerchantPrivateKey
+	common.OptionMap["AntomPublicKey"] = setting.AntomPublicKey
+	common.OptionMap["AntomGatewayURL"] = setting.AntomGatewayURL
+	common.OptionMap["AntomPayCurrency"] = setting.AntomPayCurrency
+	common.OptionMap["AntomSettlementCurrency"] = setting.AntomSettlementCurrency
+	common.OptionMap["AntomPaymentMethods"] = setting.AntomPaymentMethods
+	common.OptionMap["AntomMinTopUp"] = strconv.Itoa(setting.AntomMinTopUp)
 	common.OptionMap["CreemApiKey"] = setting.CreemApiKey
 	common.OptionMap["CreemProducts"] = setting.CreemProducts
 	common.OptionMap["CreemTestMode"] = strconv.FormatBool(setting.CreemTestMode)
@@ -657,6 +665,22 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.StripeMinTopUp, _ = strconv.Atoi(value)
 	case "StripePromotionCodesEnabled":
 		setting.StripePromotionCodesEnabled = value == "true"
+	case "AntomClientId":
+		setting.AntomClientId = strings.TrimSpace(value)
+	case "AntomMerchantPrivateKey":
+		setting.AntomMerchantPrivateKey = strings.TrimSpace(value)
+	case "AntomPublicKey":
+		setting.AntomPublicKey = strings.TrimSpace(value)
+	case "AntomGatewayURL":
+		setting.AntomGatewayURL = strings.TrimSpace(value)
+	case "AntomPayCurrency":
+		setting.AntomPayCurrency = strings.ToUpper(strings.TrimSpace(value))
+	case "AntomSettlementCurrency":
+		setting.AntomSettlementCurrency = strings.ToUpper(strings.TrimSpace(value))
+	case "AntomPaymentMethods":
+		setting.AntomPaymentMethods = strings.TrimSpace(value)
+	case "AntomMinTopUp":
+		setting.AntomMinTopUp, _ = strconv.Atoi(value)
 	case "CreemApiKey":
 		setting.CreemApiKey = value
 	case "CreemProducts":
