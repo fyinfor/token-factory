@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -29,8 +32,10 @@ func TestParseTaskResult_UsageBillingFields(t *testing.T) {
 			"video_url": "https://example.com/out.mp4"
 		},
 		"usage": {
-			"duration": 5,
-			"output_video_duration": 5,
+			"duration": 23.94,
+			"input_video_duration": 11.97,
+			"output_video_duration": 11.97,
+			"video_count": 1,
 			"SR": 720,
 			"ratio": "16:9"
 		}
@@ -40,8 +45,8 @@ func TestParseTaskResult_UsageBillingFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Duration != 5 {
-		t.Fatalf("Duration = %d, want 5", info.Duration)
+	if info.Duration != 24 {
+		t.Fatalf("Duration = %d, want 24 from usage.duration", info.Duration)
 	}
 	if info.Resolution != "720p" {
 		t.Fatalf("Resolution = %q, want 720p", info.Resolution)
@@ -51,6 +56,29 @@ func TestParseTaskResult_UsageBillingFields(t *testing.T) {
 	}
 	if info.Url != "https://example.com/out.mp4" {
 		t.Fatalf("Url = %q", info.Url)
+	}
+}
+
+func TestConvertToOpenAIVideo_PreservesAliVideoUsage(t *testing.T) {
+	task := &model.Task{
+		TaskID:     "task-1",
+		Status:     model.TaskStatusSuccess,
+		Data:       []byte(`{"output":{"video_url":"https://example.com/out.mp4"},"usage":{"SR":720,"duration":23.94,"input_video_duration":11.97,"output_video_duration":11.97,"video_count":1}}`),
+		Properties: model.Properties{OriginModelName: "happyhorse-1.0-t2v"},
+	}
+	body, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response dto.OpenAIVideo
+	if err := common.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Usage == nil {
+		t.Fatal("expected usage")
+	}
+	if response.Usage.Duration == nil || *response.Usage.Duration != 23.94 || response.Usage.InputVideoDuration == nil || *response.Usage.InputVideoDuration != 11.97 || response.Usage.OutputVideoDuration == nil || *response.Usage.OutputVideoDuration != 11.97 || response.Usage.VideoCount == nil || *response.Usage.VideoCount != 1 || response.Usage.SR == nil || *response.Usage.SR != 720 {
+		t.Fatalf("usage = %+v", response.Usage)
 	}
 }
 
