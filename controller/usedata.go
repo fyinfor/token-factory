@@ -16,10 +16,14 @@ func GetAllQuotaDates(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	username := c.Query("username")
-	mxxh, err := model.GetModelConsumptionDistributionMultiplier()
-	if err != nil {
-		common.ApiError(c, err)
-		return
+	mxxh := float64(1)
+	if role := c.GetInt("role"); role == common.RoleAdminUser || role == common.RoleRootUser {
+		var err error
+		mxxh, err = model.GetModelConsumptionDistributionMultiplier()
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	dates, stat, err := model.AggregateQuotaDataFromLogs(startTimestamp, endTimestamp, 0, username)
 	if err != nil {
@@ -53,10 +57,14 @@ func GetUserQuotaDates(c *gin.Context) {
 		})
 		return
 	}
-	mxxh, err := model.GetModelConsumptionDistributionMultiplier()
-	if err != nil {
-		common.ApiError(c, err)
-		return
+	mxxh := float64(1)
+	if role := c.GetInt("role"); role == common.RoleAdminUser || role == common.RoleRootUser {
+		var err error
+		mxxh, err = model.GetModelConsumptionDistributionMultiplier()
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	dates, stat, err := model.AggregateQuotaDataFromLogs(startTimestamp, endTimestamp, userId, "")
 	if err != nil {

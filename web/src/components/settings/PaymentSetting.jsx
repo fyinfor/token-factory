@@ -22,6 +22,7 @@ import { Card, Spin } from '@douyinfe/semi-ui';
 import SettingsGeneralPayment from '../../pages/Setting/Payment/SettingsGeneralPayment';
 import SettingsPaymentGateway from '../../pages/Setting/Payment/SettingsPaymentGateway';
 import SettingsPaymentGatewayStripe from '../../pages/Setting/Payment/SettingsPaymentGatewayStripe';
+import SettingsPaymentGatewayAntom from '../../pages/Setting/Payment/SettingsPaymentGatewayAntom';
 import SettingsPaymentGatewayCreem from '../../pages/Setting/Payment/SettingsPaymentGatewayCreem';
 import SettingsPaymentGatewayWaffo from '../../pages/Setting/Payment/SettingsPaymentGatewayWaffo';
 import SettingsPaymentGatewayUcoin from '../../pages/Setting/Payment/SettingsPaymentGatewayUcoin';
@@ -107,6 +108,7 @@ const PaymentSetting = ({ activeSection = 'general' }) => {
           case 'MinTopUp':
           case 'StripeUnitPrice':
           case 'StripeMinTopUp':
+          case 'AntomMinTopUp':
             newInputs[item.key] = parseFloat(item.value);
             break;
           case 'YipayAppSecret':
@@ -162,6 +164,14 @@ const PaymentSetting = ({ activeSection = 'general' }) => {
         {activeSection === 'stripe' && (
           <Card style={{ marginTop: '10px' }}>
             <SettingsPaymentGatewayStripe
+              options={inputs}
+              refresh={onRefresh}
+            />
+          </Card>
+        )}
+        {activeSection === 'antom' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsPaymentGatewayAntom
               options={inputs}
               refresh={onRefresh}
             />

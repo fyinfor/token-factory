@@ -1,6 +1,7 @@
 package model
 
 import (
+	"math"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -24,18 +25,22 @@ func TestModelConsumptionDistributionMultiplierOption(t *testing.T) {
 
 	multiplier, err := GetModelConsumptionDistributionMultiplier()
 	if err != nil || multiplier != 1 {
-		t.Fatalf("missing mxxh = %d, %v; want 1, nil", multiplier, err)
+		t.Fatalf("missing mxxh = %v, %v; want 1, nil", multiplier, err)
 	}
 	if err := ensureModelConsumptionDistributionMultiplierOption(); err != nil {
 		t.Fatalf("initialize mxxh: %v", err)
 	}
 
-	for value, want := range map[string]int{
-		"1":       1,
-		"10":      10,
-		"20":      20,
-		"0":       1,
-		"invalid": 1,
+	for value, want := range map[string]float64{
+		"1":        1,
+		"10":       10,
+		"20":       20,
+		"99.99":    99.99,
+		"0":        1,
+		"-2.5":     1,
+		"NaN":      1,
+		"Infinity": 1,
+		"invalid":  1,
 	} {
 		if err := DB.Model(&Option{}).
 			Where(&Option{Key: modelConsumptionDistributionMultiplierKey}).
@@ -43,8 +48,8 @@ func TestModelConsumptionDistributionMultiplierOption(t *testing.T) {
 			t.Fatalf("set mxxh=%q: %v", value, err)
 		}
 		got, err := GetModelConsumptionDistributionMultiplier()
-		if err != nil || got != want {
-			t.Fatalf("mxxh=%q returned %d, %v; want %d, nil", value, got, err, want)
+		if err != nil || math.Abs(got-want) > 1e-9 {
+			t.Fatalf("mxxh=%q returned %v, %v; want %v, nil", value, got, err, want)
 		}
 	}
 }

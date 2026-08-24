@@ -152,6 +152,48 @@ func MaskCredentialForAdminDisplay(secret string) string {
 	}
 }
 
+// MaskKeyHeadTail 公私钥类长密钥脱敏：去掉 PEM 头尾与空白后，保留开头和结尾各 8 位。
+func MaskKeyHeadTail(secret string) string {
+	s := strings.TrimSpace(secret)
+	if s == "" {
+		return ""
+	}
+	s = strings.ReplaceAll(s, "-----BEGIN PRIVATE KEY-----", "")
+	s = strings.ReplaceAll(s, "-----END PRIVATE KEY-----", "")
+	s = strings.ReplaceAll(s, "-----BEGIN PUBLIC KEY-----", "")
+	s = strings.ReplaceAll(s, "-----END PUBLIC KEY-----", "")
+	s = strings.ReplaceAll(s, "-----BEGIN RSA PRIVATE KEY-----", "")
+	s = strings.ReplaceAll(s, "-----END RSA PRIVATE KEY-----", "")
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, s)
+	r := []rune(s)
+	n := len(r)
+	if n == 0 {
+		return ""
+	}
+	if n <= 16 {
+		return MaskCredentialForAdminDisplay(s)
+	}
+	return string(r[:8]) + "..." + string(r[n-8:])
+}
+
+// IsMaskedKeyDisplay 判断提交值是否为脱敏回显（未改动）。
+func IsMaskedKeyDisplay(submitted, actual string) bool {
+	submitted = strings.TrimSpace(submitted)
+	if submitted == "" {
+		return true
+	}
+	actual = strings.TrimSpace(actual)
+	if actual == "" {
+		return false
+	}
+	return submitted == MaskKeyHeadTail(actual) || submitted == MaskCredentialForAdminDisplay(actual)
+}
+
 // maskHostTail returns the tail parts of a domain/host that should be preserved.
 // It keeps 2 parts for likely country-code TLDs (e.g., co.uk, com.cn), otherwise keeps only the TLD.
 func maskHostTail(parts []string) []string {

@@ -205,11 +205,11 @@ func dashScopeDurationFromUsage(payload map[string]any) float64 {
 	if usage == nil {
 		return 0
 	}
-	// 优先成片输出时长，其次 usage.duration
+	// duration 是 DashScope usage 的计费时长，不能用 output_video_duration 替代。
 	for _, key := range []string{
-		"output_video_duration", "OutputVideoDuration",
 		"duration", "Duration",
 		"video_duration", "VideoDuration",
+		"output_video_duration", "OutputVideoDuration",
 	} {
 		if d := metadataToFloat64(usage[key]); d > 0 {
 			return d

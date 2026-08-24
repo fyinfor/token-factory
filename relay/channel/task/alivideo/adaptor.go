@@ -777,9 +777,9 @@ func applyAliVideoUsageToTaskInfo(taskResult *relaycommon.TaskInfo, usage *AliVi
 	if taskResult == nil || usage == nil {
 		return
 	}
-	dur := usage.OutputVideoDuration
+	dur := usage.Duration
 	if dur <= 0 {
-		dur = usage.Duration
+		dur = usage.OutputVideoDuration
 	}
 	if dur > 0 {
 		taskResult.Duration = int(math.Ceil(dur))
@@ -811,6 +811,16 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	var aliResp AliVideoResponse
 	if err := common.Unmarshal(task.Data, &aliResp); err == nil {
 		openAIResp.SetMetadata("url", aliResp.Output.VideoURL)
+		if aliResp.Usage != nil {
+			openAIResp.Usage = &dto.OpenAIVideoUsage{
+				Duration:            &aliResp.Usage.Duration,
+				InputVideoDuration:  &aliResp.Usage.InputVideoDuration,
+				OutputVideoDuration: &aliResp.Usage.OutputVideoDuration,
+				VideoCount:          &aliResp.Usage.VideoCount,
+				SR:                  &aliResp.Usage.SR,
+				Ratio:               &aliResp.Usage.Ratio,
+			}
+		}
 		if aliResp.Code != "" {
 			openAIResp.Error = &dto.OpenAIVideoError{Code: aliResp.Code, Message: aliResp.Message}
 		} else if aliResp.Output.Code != "" {

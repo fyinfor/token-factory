@@ -286,6 +286,10 @@ func GetOptions(c *gin.Context) {
 		Value: ucoinApiKeyDisp,
 	})
 	options = append(options,
+		&model.Option{Key: "AntomMerchantPrivateKey", Value: common.MaskKeyHeadTail(setting.AntomMerchantPrivateKey)},
+		&model.Option{Key: "AntomPublicKey", Value: common.MaskKeyHeadTail(setting.AntomPublicKey)},
+	)
+	options = append(options,
 		&model.Option{Key: "AliyunGuardrailAccessKeyID", Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeyID)},
 		&model.Option{Key: "AliyunGuardrailAccessKeySecret", Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeySecret)},
 		&model.Option{Key: "AliyunRealNameVerificationAccessKeyID", Value: common.MaskCredentialForAdminDisplay(setting.AliyunRealNameVerificationAccessKeyID)},
@@ -461,6 +465,14 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	}
+	if option.Key == "AntomMerchantPrivateKey" && common.IsMaskedKeyDisplay(valStr, setting.AntomMerchantPrivateKey) {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+		return
+	}
+	if option.Key == "AntomPublicKey" && common.IsMaskedKeyDisplay(valStr, setting.AntomPublicKey) {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+		return
 	}
 	if option.Key == "AliyunRealNameVerificationAccessKeyID" && strings.TrimSpace(setting.AliyunRealNameVerificationAccessKeyID) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(setting.AliyunRealNameVerificationAccessKeyID) {

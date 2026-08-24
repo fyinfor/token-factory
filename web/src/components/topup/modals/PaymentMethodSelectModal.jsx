@@ -1,4 +1,4 @@
-import { getPayMethodDisplayName } from '../../../helpers';
+import { getPayMethodDisplayName, isPayMethodUnavailable } from '../../../helpers';
 import { Modal, Typography, Space, Button, Tooltip } from '@douyinfe/semi-ui';
 import { SiStripe } from 'react-icons/si';
 import { CreditCard, Wallet } from 'lucide-react';
@@ -18,13 +18,14 @@ const PaymentMethodSelectModal = ({
   payMethods = [],
   enableOnlineTopUp,
   enableStripeTopUp,
+  enableAntomTopUp,
   onSelect,
   activePaymentKey = '',
 }) => {
   const epayMethods = payMethods.filter((m) => m.type !== 'waffo');
 
   const renderPayIcon = (payMethod) => {
-    if (payMethod.type === 'alipay') {
+    if (payMethod.type === 'alipay' || payMethod.type === 'antom') {
       return <AlipayPayLogo size={22} />;
     }
     if (payMethod.type === 'wxpay') {
@@ -64,13 +65,15 @@ const PaymentMethodSelectModal = ({
           {epayMethods.map((payMethod) => {
             const minTopupVal = Number(payMethod.min_topup) || 0;
             const maxTopupVal = Number(payMethod.max_topup) || 0;
-            const isStripe = payMethod.type === 'stripe';
             const countVal = Number(topUpCount || 0);
             const belowMin = minTopupVal > countVal;
             const aboveMax = maxTopupVal > 0 && maxTopupVal < countVal;
             const disabled =
-              (!enableOnlineTopUp && !isStripe) ||
-              (!enableStripeTopUp && isStripe) ||
+              isPayMethodUnavailable(payMethod.type, {
+                enableOnlineTopUp,
+                enableStripeTopUp,
+                enableAntomTopUp,
+              }) ||
               belowMin ||
               aboveMax;
 
