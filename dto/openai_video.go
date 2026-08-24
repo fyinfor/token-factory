@@ -27,8 +27,14 @@ type OpenAIVideoOutput struct {
 }
 
 type OpenAIVideoUsage struct {
-	CompletionTokens int `json:"completion_tokens,omitempty"`
-	TotalTokens      int `json:"total_tokens,omitempty"`
+	CompletionTokens    int      `json:"completion_tokens,omitempty"`
+	TotalTokens         int      `json:"total_tokens,omitempty"`
+	Duration            *float64 `json:"duration,omitempty"`
+	InputVideoDuration  *float64 `json:"input_video_duration,omitempty"`
+	OutputVideoDuration *float64 `json:"output_video_duration,omitempty"`
+	VideoCount          *int     `json:"video_count,omitempty"`
+	SR                  *int     `json:"SR,omitempty"`
+	Ratio               *string  `json:"ratio,omitempty"`
 }
 
 // OpenAIVideo is the unified response for POST submit and GET poll on /v1/videos/* (OpenAI-style video task API).

@@ -66,7 +66,8 @@ func TestExtractDashScopeVideoMetadata_TopLevelUsage(t *testing.T) {
 func TestExtractDashScopeUsageSpec(t *testing.T) {
 	raw := []byte(`{
 		"usage": {
-			"output_video_duration": 5.2,
+			"duration": 23.94,
+			"output_video_duration": 11.97,
 			"SR": 720,
 			"ratio": "16:9"
 		}
@@ -75,8 +76,8 @@ func TestExtractDashScopeUsageSpec(t *testing.T) {
 	if res != "720p" {
 		t.Fatalf("resolution = %q, want 720p", res)
 	}
-	if dur != 6 {
-		t.Fatalf("duration = %d, want 6 (ceil)", dur)
+	if dur != 24 {
+		t.Fatalf("duration = %d, want 24 from duration (ceil)", dur)
 	}
 	if ratio != "16:9" {
 		t.Fatalf("ratio = %q", ratio)
