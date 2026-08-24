@@ -32,7 +32,8 @@ const (
 	// EndpointTypeAliVideo is Alibaba DashScope video-synthesis (async task API).
 	EndpointTypeAliVideo EndpointType = "ali-video"
 	// EndpointTypeSeedanceVideo is VolcEngine contents generations (Seedance 2.0 async API).
-	// Client entry: POST /v1/video/generations; upstream: POST /api/v3/contents/generations/tasks.
+	// Client entry: POST /v1/video/generations 或 POST /api/v3/contents/generations/tasks;
+	// upstream: POST /api/v3/contents/generations/tasks.
 	EndpointTypeSeedanceVideo EndpointType = "seedance-video"
 	// EndpointTypeMiniMaxH3Video is MiniMax Hailuo-03 / H3 video generation V2.
 	// Client entry: POST /v1/video/generations; upstream: POST {baseUrl}/video_generation

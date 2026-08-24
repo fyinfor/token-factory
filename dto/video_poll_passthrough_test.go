@@ -196,4 +196,7 @@ func TestIsVideoGenerationsFetchPath(t *testing.T) {
 	require.False(t, IsVideoGenerationsFetchPath("/v1/videos/task_abc"))
 	require.True(t, IsContentsGenerationsFetchPath("/api/v3/contents/generations/tasks/cgt-1"))
 	require.False(t, IsContentsGenerationsFetchPath("/v1/video/generations/cgt-1"))
+	require.True(t, IsContentsGenerationsSubmitPath("/api/v3/contents/generations/tasks"))
+	require.True(t, IsContentsGenerationsSubmitPath("/api/v3/contents/generations/tasks/"))
+	require.False(t, IsContentsGenerationsSubmitPath("/api/v3/contents/generations/tasks/cgt-1"))
 }

@@ -4869,7 +4869,7 @@ const EditChannelModal = (props) => {
                                 )
                               }
                               extraText={t(
-                                '提交仍走 Contents API。查询默认用新接口；选择旧接口时保留原 /v1/video/generations/{task_id} 逻辑，回包字段会自动适配。',
+                                '客户端可走 POST /v1/video/generations 或官方 POST /api/v3/contents/generations/tasks；上游提交始终为 Contents API。查询可按下面选项选择旧/新接口。',
                               )}
                             />
                           )}
