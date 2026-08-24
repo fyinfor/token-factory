@@ -112,9 +112,15 @@ func (*AntomAdaptor) RequestPay(c *gin.Context, req *AntomPayRequest) {
 	}
 	notifyURL := platformBase + "/api/antom/notify"
 	terminalType := "WEB"
+	osType := ""
 	ua := strings.ToLower(c.GetHeader("User-Agent"))
 	if strings.Contains(ua, "mobile") || strings.Contains(ua, "android") || strings.Contains(ua, "iphone") {
 		terminalType = "WAP"
+		if strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad") {
+			osType = "IOS"
+		} else {
+			osType = "ANDROID"
+		}
 	}
 
 	payLink, err := service.CreateAntomCheckoutSession(
@@ -125,6 +131,7 @@ func (*AntomAdaptor) RequestPay(c *gin.Context, req *AntomPayRequest) {
 		redirectURL,
 		strconv.Itoa(user.Id),
 		terminalType,
+		osType,
 	)
 	if err != nil {
 		log.Println("获取Antom Checkout支付链接失败", err)

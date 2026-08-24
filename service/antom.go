@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -54,6 +55,7 @@ type antomCreateSessionRequest struct {
 	} `json:"order"`
 	Env struct {
 		TerminalType string `json:"terminalType"`
+		OsType       string `json:"osType,omitempty"`
 	} `json:"env"`
 	AvailablePaymentMethod *struct {
 		PaymentMethodTypeList []antomPaymentMethodOption `json:"paymentMethodTypeList"`
@@ -80,12 +82,13 @@ type AntomNotifyPayload struct {
 	PaymentAmount     antomAmount    `json:"paymentAmount"`
 }
 
-func CreateAntomCheckoutSession(paymentRequestId string, payAmountMinor string, currency string, notifyURL string, redirectURL string, buyerId string, terminalType string) (string, error) {
+func CreateAntomCheckoutSession(paymentRequestId string, payAmountMinor string, currency string, notifyURL string, redirectURL string, buyerId string, terminalType string, osType string) (string, error) {
 	if !setting.AntomConfigured() {
 		return "", fmt.Errorf("Antom 未配置")
 	}
 	if terminalType != "WAP" && terminalType != "APP" {
 		terminalType = "WEB"
+		osType = ""
 	}
 	req := antomCreateSessionRequest{
 		ProductCode:        "CASHIER_PAYMENT",
@@ -100,13 +103,14 @@ func CreateAntomCheckoutSession(paymentRequestId string, payAmountMinor string, 
 	req.Order.OrderAmount = antomAmount{Currency: currency, Value: payAmountMinor}
 	req.Order.Buyer.ReferenceBuyerId = buyerId
 	req.Env.TerminalType = terminalType
+	req.Env.OsType = osType
 	settle := setting.GetAntomSettlementCurrency()
 	if settle != "" {
 		req.SettlementStrategy = &struct {
 			SettlementCurrency string `json:"settlementCurrency"`
 		}{SettlementCurrency: settle}
 	}
-	methods := setting.GetAntomPaymentMethodTypes()
+	methods := setting.GetAntomPaymentMethodTypesForCurrency(currency)
 	if len(methods) > 0 {
 		list := make([]antomPaymentMethodOption, 0, len(methods))
 		for i, m := range methods {
@@ -142,6 +146,7 @@ func CreateAntomCheckoutSession(paymentRequestId string, payAmountMinor string, 
 	if strings.TrimSpace(parsed.NormalUrl) == "" {
 		return "", fmt.Errorf("Antom 未返回收银台链接")
 	}
+	log.Printf("[Antom] createPaymentSession ok requestId=%s currency=%s value=%s methods=%v", paymentRequestId, currency, payAmountMinor, methods)
 	return parsed.NormalUrl, nil
 }
 
