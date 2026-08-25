@@ -46,7 +46,7 @@ export default function SettingsPaymentGatewayAntom(props) {
     AntomGatewayURL: 'https://open-sea-global.alipay.com',
     AntomPayCurrency: 'CNY',
     AntomSettlementCurrency: '',
-    AntomPaymentMethods: 'ALIPAY_CN,ALIPAY_HK',
+    AntomPaymentMethods: '',
     AntomMinTopUp: 1,
   });
   const [originInputs, setOriginInputs] = useState({});
@@ -63,8 +63,7 @@ export default function SettingsPaymentGatewayAntom(props) {
           'https://open-sea-global.alipay.com',
         AntomPayCurrency: props.options.AntomPayCurrency || 'CNY',
         AntomSettlementCurrency: props.options.AntomSettlementCurrency || '',
-        AntomPaymentMethods:
-          props.options.AntomPaymentMethods || 'ALIPAY_CN,ALIPAY_HK',
+        AntomPaymentMethods: props.options.AntomPaymentMethods || '',
         AntomMinTopUp:
           props.options.AntomMinTopUp !== undefined
             ? parseFloat(props.options.AntomMinTopUp)
@@ -115,7 +114,7 @@ export default function SettingsPaymentGatewayAntom(props) {
       });
       options.push({
         key: 'AntomPaymentMethods',
-        value: inputs.AntomPaymentMethods || 'ALIPAY_CN,ALIPAY_HK',
+        value: inputs.AntomPaymentMethods || '',
       });
       if (
         inputs.AntomMinTopUp !== undefined &&
@@ -238,7 +237,8 @@ export default function SettingsPaymentGatewayAntom(props) {
               <Form.Input
                 field='AntomPaymentMethods'
                 label={t('收银台支付方式')}
-                placeholder='ALIPAY_CN,ALIPAY_HK'
+                placeholder={t('留空则按已开通方式展示；不要只填 ALIPAY_CN,ALIPAY_HK')}
+                extraText={t('AlipayHK 仅 HKD 订单会出现。Visa 在 Dashboard 变为已开通后，留空即可出现在收银台。卡可写 CARD。')}
               />
             </Col>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
