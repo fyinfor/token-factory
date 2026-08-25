@@ -92,7 +92,7 @@ const PaymentConfirmModal = ({
                           </span>
                         ) : payMethod.type === 'antom' ? (
                           <span className='mr-2 inline-flex'>
-                            <AntomPayLogo height={16} />
+                            <AntomPayLogo size={18} />
                           </span>
                         ) : payMethod.type === 'wxpay' ? (
                           <span className='mr-2 inline-flex'>
@@ -135,7 +135,7 @@ const PaymentConfirmModal = ({
                       return (
                         <>
                           <span className='mr-2 inline-flex'>
-                            <AntomPayLogo height={16} />
+                            <AntomPayLogo size={18} />
                           </span>
                           <Text className='text-slate-900 dark:text-slate-100'>
                             {t('Antom 收银台')}

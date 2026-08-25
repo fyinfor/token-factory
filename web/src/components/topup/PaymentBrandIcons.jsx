@@ -9,7 +9,7 @@ import React from 'react';
 const ALIPAY_LOGO_SRC = '/payment-brands/alipay.png';
 const WECHAT_PAY_LOGO_SRC = '/payment-brands/wechatpay.png';
 const ERP_LOGO_SRC = '/payment-brands/erp.png';
-const ANTOM_LOGO_SRC = '/payment-brands/antom.png';
+const ANTOM_LOGO_SRC = '/payment-brands/antom.svg';
 
 function PayBrandImage({ src, size, width, height, className, alt }) {
   const w = width ?? size;
@@ -56,15 +56,13 @@ export function WeChatPayLogo({ size = 24, className }) {
   );
 }
 
-export function AntomPayLogo({ height = 22, className }) {
-  const width = Math.round((height * 87) / 36);
+export function AntomPayLogo({ size = 24, className }) {
   return (
     <PayBrandImage
       src={ANTOM_LOGO_SRC}
-      width={width}
-      height={height}
+      size={size}
       className={className}
-      alt='Antom'
+      alt=''
     />
   );
 }

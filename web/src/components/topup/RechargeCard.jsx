@@ -62,7 +62,6 @@ const { Text } = Typography;
 const PAY_ICON_SIZE = 22;
 
 const iconOnlyBtnClass = '!rounded-lg !p-2 !min-w-[40px] !min-h-[40px]';
-const antomLogoBtnClass = '!rounded-lg !px-2 !py-1 !min-w-[92px] !min-h-[40px]';
 const payBtnClass = '!rounded-lg !px-4 !py-2';
 
 function renderPayMethodIcon(payMethod) {
@@ -70,7 +69,7 @@ function renderPayMethodIcon(payMethod) {
     case 'alipay':
       return <AlipayPayLogo size={28} />;
     case 'antom':
-      return <AntomPayLogo height={22} />;
+      return <AntomPayLogo size={28} />;
     case 'wxpay':
       return <WeChatPayLogo size={28} />;
     case 'stripe':
@@ -88,21 +87,7 @@ function renderPayMethodIcon(payMethod) {
 }
 
 function getPayMethodLabel(payMethod, t) {
-  if (payMethod.name) return payMethod.name;
-  switch (payMethod.type) {
-    case 'alipay':
-      return t('支付宝');
-    case 'wxpay':
-      return t('微信');
-    case 'stripe':
-      return 'Stripe';
-    case 'antom':
-      return t('Antom 收银台');
-    case 'paypal':
-      return 'PayPal';
-    default:
-      return payMethod.type;
-  }
+  return getPayMethodDisplayName(payMethod, t);
 }
 
 function renderUcoinPairIcon(pair) {
@@ -402,11 +387,7 @@ const RechargeCard = ({
                                     icon={renderPayMethodIcon(payMethod)}
                                     aria-label={displayLabel}
                                     className={
-                                      payMethod.type === 'antom'
-                                        ? antomLogoBtnClass
-                                        : logoOnly
-                                          ? iconOnlyBtnClass
-                                          : payBtnClass
+                                      logoOnly ? iconOnlyBtnClass : payBtnClass
                                     }
                                   >
                                     {logoOnly ? null : getPayMethodDisplayName(payMethod, t)}

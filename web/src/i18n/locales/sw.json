@@ -1,4 +1,4 @@
-﻿{
+{
   "视频生成": "utengenezaji wa video",
   "translation": {
     " ": " ",
@@ -6253,7 +6253,9 @@
     "搜索姓名/企业、卡号、证件号、用户名": "Search name/company, card number, certificate number, or username",
     "手机号码": "Phone number",
     "首页热门": "Maarufu kwenye Ukurasa wa Nyumbani",
-    "首页热门配置": "Usanidi wa Maarufu wa Ukurasa wa Nyumbani"
+    "首页热门配置": "Usanidi wa Maarufu wa Ukurasa wa Nyumbani",
+    "Antom 收银台": "Malipo ya Antom",
+    "管理员未开启 Antom 充值！": "Msimamizi hajawasha malipo ya Antom!"
   },
   "广告按钮文案（英文）": "Button label (English)",
   "广告标题高亮词（英文）": "Title highlight (English)",
