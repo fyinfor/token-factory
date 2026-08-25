@@ -41,6 +41,8 @@ const computeWeightsFromOrder = (channels) => {
   }));
 };
 
+const FALLBACK_OPEN_WEIGHT = 10;
+
 const resolveEffectiveEnabled = (channel) => {
   if (channel.user_configured) return channel.user_enabled;
   if (channel.global_configured) return channel.global_enabled;
@@ -53,6 +55,7 @@ const resolveDisplayWeight = (channel) => {
   return 0;
 };
 
+// 权重为 0 即为关闭；关闭时界面也显示 0。
 const resolveDefaultWeight = (channel) => {
   if (channel.global_configured) return channel.global_weight || 0;
   return 0;
@@ -63,9 +66,34 @@ const resolveDefaultEnabled = (channel) => {
   return true;
 };
 
-const isWeightAtDefault = (channel) =>
-  resolveDisplayWeight(channel) === resolveDefaultWeight(channel) &&
-  resolveEffectiveEnabled(channel) === resolveDefaultEnabled(channel);
+// 权重为 0 即为关闭。未单独配置时展示空（仍参与选路），避免「0 却是开启」。
+const resolveEditorWeight = (channel) => {
+  if (channel.user_configured) {
+    if (!channel.user_enabled || !(channel.user_weight > 0)) return 0;
+    return channel.user_weight;
+  }
+  if (channel.global_configured) {
+    if (!channel.global_enabled || !(channel.global_weight > 0)) return 0;
+    return channel.global_weight;
+  }
+  return null;
+};
+
+const resolveResumeWeight = (channel) => {
+  if (channel.user_weight > 0) return channel.user_weight;
+  if (channel.global_weight > 0) return channel.global_weight;
+  return FALLBACK_OPEN_WEIGHT;
+};
+
+const isWeightAtDefault = (channel) => {
+  const current = resolveEditorWeight(channel);
+  const fallback = channel.global_configured
+    ? channel.global_enabled && channel.global_weight > 0
+      ? channel.global_weight
+      : 0
+    : null;
+  return current === fallback;
+};
 
 const ChannelModelsCell = ({ models, t }) => {
   const modelsInGroup = models || [];
@@ -92,7 +120,7 @@ const applyOrderWeightsToChannels = (channels) =>
     ...channel,
     user_weight: weight,
     user_configured: true,
-    user_enabled: resolveEffectiveEnabled(channel),
+    user_enabled: true,
   }));
 
 const fuzzyMatchModelQuery = (query, model, groupKey, displayName) => {
@@ -1238,14 +1266,17 @@ const ChannelRow = ({
   onSaved,
   t,
 }) => {
-  const [weight, setWeight] = useState(() => resolveDisplayWeight(channel));
-  const [enabled, setEnabled] = useState(() => resolveEffectiveEnabled(channel));
+  const [weight, setWeight] = useState(() => resolveEditorWeight(channel));
   const [rowSaving, setRowSaving] = useState(false);
   const skipBlurSaveRef = useRef(false);
+  const lastOpenWeightRef = useRef(resolveResumeWeight(channel));
 
   useEffect(() => {
-    setWeight(resolveDisplayWeight(channel));
-    setEnabled(resolveEffectiveEnabled(channel));
+    const next = resolveEditorWeight(channel);
+    setWeight(next);
+    if (typeof next === 'number' && next > 0) {
+      lastOpenWeightRef.current = next;
+    }
   }, [
     channel.user_weight,
     channel.user_enabled,
@@ -1255,18 +1286,23 @@ const ChannelRow = ({
     channel.global_configured,
   ]);
 
-  const persistWeight = async (nextWeight, nextEnabled) => {
-    const currentWeight = resolveDisplayWeight(channel);
-    const currentEnabled = resolveEffectiveEnabled(channel);
-    if (nextWeight === currentWeight && nextEnabled === currentEnabled) {
+  const persistPair = async (nextWeight, nextEnabled) => {
+    let weightValue = Number(nextWeight) || 0;
+    let enabledValue = Boolean(nextEnabled);
+    if (weightValue <= 0 || !enabledValue) {
+      weightValue = 0;
+      enabledValue = false;
+    }
+    const currentWeight = resolveEditorWeight(channel);
+    const currentEnabled = currentWeight !== 0;
+    if (weightValue === (currentWeight || 0) && enabledValue === currentEnabled && currentWeight !== null) {
       return true;
     }
     setRowSaving(true);
-    const ok = await onWeightChange(groupKey, channel.channel_id, nextWeight, nextEnabled);
+    const ok = await onWeightChange(groupKey, channel.channel_id, weightValue, enabledValue);
     setRowSaving(false);
     if (!ok) {
-      setWeight(currentWeight);
-      setEnabled(currentEnabled);
+      setWeight(resolveEditorWeight(channel));
     }
     return ok;
   };
@@ -1276,12 +1312,29 @@ const ChannelRow = ({
       skipBlurSaveRef.current = false;
       return;
     }
-    void persistWeight(weight, enabled);
+    const numeric = Number(weight);
+    if (weight == null || Number.isNaN(numeric)) {
+      return;
+    }
+    if (numeric <= 0) {
+      setWeight(0);
+      void persistPair(0, false);
+      return;
+    }
+    lastOpenWeightRef.current = numeric;
+    setWeight(numeric);
+    void persistPair(numeric, true);
   };
 
   const handleToggle = (checked) => {
-    setEnabled(checked);
-    void persistWeight(weight, checked);
+    if (checked) {
+      const next = lastOpenWeightRef.current || resolveResumeWeight(channel);
+      setWeight(next);
+      void persistPair(next, true);
+      return;
+    }
+    setWeight(0);
+    void persistPair(0, false);
   };
 
   const markSkipBlurSave = () => {
@@ -1290,6 +1343,7 @@ const ChannelRow = ({
 
   const supplierLabel = resolveSupplierLabel(channel);
   const routeSlugLabel = resolveRouteSlugLabel(channel);
+  const switchOn = weight !== 0;
 
   return (
     <tr
@@ -1335,7 +1389,7 @@ const ChannelRow = ({
         <div className='flex items-center gap-1'>
           <InputNumber
             value={weight}
-            onChange={(v) => setWeight(v ?? 0)}
+            onChange={(v) => setWeight(v == null ? null : v)}
             min={0}
             max={1000}
             size='small'
@@ -1360,7 +1414,7 @@ const ChannelRow = ({
         <span onMouseDown={markSkipBlurSave}>
           <Switch
             size='small'
-            checked={enabled}
+            checked={switchOn}
             onChange={handleToggle}
             disabled={saving}
           />

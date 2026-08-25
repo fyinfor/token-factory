@@ -93,6 +93,14 @@ type ModelGroupWeight struct {
 	Enabled   bool      `gorm:"default:true" json:"enabled"`
 }
 
+// NormalizeRouteChannelWeight 权重与开关合一：权重为 0 即为关闭，关闭时权重也落为 0。
+func NormalizeRouteChannelWeight(weight int, enabled bool) (int, bool) {
+	if weight <= 0 || !enabled {
+		return 0, false
+	}
+	return weight, true
+}
+
 // LoadModelGroupWeights 加载某归类下的全部全局权重。
 func LoadModelGroupWeights(groupKey string) ([]ModelGroupWeight, error) {
 	var rows []ModelGroupWeight
@@ -116,6 +124,7 @@ func LoadAllModelGroupWeights() ([]ModelGroupWeight, error) {
 
 // UpsertModelGroupWeight 创建或更新全局归类权重。
 func UpsertModelGroupWeight(groupKey string, channelID int, weight int, enabled bool) (ModelGroupWeight, error) {
+	weight, enabled = NormalizeRouteChannelWeight(weight, enabled)
 	var existing ModelGroupWeight
 	result := DB.Where("group_key = ? AND channel_id = ?", groupKey, channelID).First(&existing)
 	if result.RowsAffected == 0 {
@@ -125,7 +134,7 @@ func UpsertModelGroupWeight(groupKey string, channelID int, weight int, enabled 
 			Weight:    weight,
 			Enabled:   enabled,
 		}
-		if err := DB.Create(&w).Error; err != nil {
+		if err := DB.Select("GroupKey", "ChannelID", "Weight", "Enabled").Create(&w).Error; err != nil {
 			return w, err
 		}
 		return w, nil

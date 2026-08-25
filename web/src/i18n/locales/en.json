@@ -5883,7 +5883,7 @@
     "route_policy.model_search_placeholder": "e.g. gpt-4o",
     "route_policy.models": "models",
     "route_policy.drag_handle": "Drag to reorder",
-    "route_policy.drag_sort_hint": "Drag the handle to set channel priority (higher rows get higher weight), or edit weights directly.",
+    "route_policy.drag_sort_hint": "Drag the handle to set channel priority (higher rows get higher weight). Weight 0 disables the channel; you can also edit the weight or use the switch.",
     "route_policy.my_override": "Mine",
     "route_policy.override_added": "Override rule added",
     "route_policy.override_deleted": "Override rule deleted",

@@ -5736,7 +5736,7 @@
     "route_policy.model_search_placeholder": "输入模型名，如 gpt-4o",
     "route_policy.models": "个模型",
     "route_policy.drag_handle": "拖动排序",
-    "route_policy.drag_sort_hint": "拖动左侧手柄调整渠道优先级，越靠上权重越高；也可直接修改权重数值。",
+    "route_policy.drag_sort_hint": "拖动左侧手柄调整渠道优先级，越靠上权重越高；权重为 0 表示关闭该渠道，也可直接改权重或用开关。",
     "route_policy.my_override": "我的",
     "route_policy.override_added": "覆盖规则已添加",
     "route_policy.override_deleted": "覆盖规则已删除",
