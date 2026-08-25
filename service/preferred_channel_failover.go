@@ -10,6 +10,7 @@ import (
 )
 
 // CollectSameModelRouteCandidates 收集分组下同模型的启用渠道候选（含单价）。
+// 仅纳入该渠道×模型已成功测通连通性的渠道。
 func CollectSameModelRouteCandidates(group, modelName string) []RouteChannelCandidate {
 	return CollectSameModelRouteCandidatesWithFilter(group, modelName, nil)
 }
@@ -21,6 +22,11 @@ func CollectSameModelRouteCandidatesWithFilter(group, modelName string, filter f
 	if len(channelIDs) == 0 {
 		return nil
 	}
+	testIndex, err := model.LoadChannelPricingTestSuccessIndex()
+	if err != nil || testIndex == nil {
+		testIndex = map[int][]string{}
+	}
+
 	var candidates []RouteChannelCandidate
 	seen := make(map[int]bool, len(channelIDs))
 	for _, cid := range channelIDs {
@@ -30,6 +36,9 @@ func CollectSameModelRouteCandidatesWithFilter(group, modelName string, filter f
 		seen[cid] = true
 		ch, err := model.CacheGetChannel(cid)
 		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if !model.ChannelModelHasPassedConnectivityTest(testIndex, ch.Id, modelName) {
 			continue
 		}
 		if filter != nil && !filter(ch) {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 // LocalUserRoutePolicy 用户路由策略完整视图（本地实现，供控制台 API）。
@@ -45,6 +46,7 @@ type LocalUserGroupChannel struct {
 	GlobalEnabled    bool
 	GlobalConfigured bool
 	Price            float64
+	UserDiscount     float64 // 当前用户相对官方价的优惠百分点（归类内模型取最优）
 }
 
 // LocalUserOverrideItem 归类覆盖项。
@@ -101,7 +103,22 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 		return nil, err
 	}
 
+	groupRatio := 1.0
+	if userID > 0 {
+		if g, gErr := model.GetUserGroup(userID, false); gErr == nil && strings.TrimSpace(g) != "" {
+			groupRatio = ratio_setting.GetGroupRatio(g)
+			if groupRatio <= 0 {
+				groupRatio = 1
+			}
+		}
+	}
+
 	aliasByAppID := loadSupplierAliasMap(channels)
+
+	testIndex, testErr := model.LoadChannelPricingTestSuccessIndex()
+	if testErr != nil || testIndex == nil {
+		testIndex = map[int][]string{}
+	}
 
 	groupModels := make(map[string]map[string]bool)
 	groupChannels := make(map[string]map[int]*LocalUserGroupChannel)
@@ -128,6 +145,9 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 			}
 			// 用户指定价：price_cap / channel_list 下不可用渠道不进入智能路由 UI。
 			if userID > 0 && !ChannelAllowedForUserPricing(userID, m, ch) {
+				continue
+			}
+			if !model.ChannelModelHasPassedConnectivityTest(testIndex, ch.Id, m) {
 				continue
 			}
 			key := model.ResolveModelGroupKey(m, globalOverrideMap)
@@ -163,6 +183,9 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 			price := ResolveChannelModelConfiguredUnitPriceOrZero(ch, m)
 			if price > 0 && (entry.Price <= 0 || price < entry.Price) {
 				entry.Price = price
+			}
+			if disc := resolveUserChannelModelDiscount(userID, ch, m, groupRatio); disc > entry.UserDiscount {
+				entry.UserDiscount = disc
 			}
 		}
 	}
@@ -317,6 +340,37 @@ func maskChannelName(name string) string {
 		return string(runes[:1]) + "***" + string(runes[len(runes)-1:])
 	}
 	return string(runes[:2]) + "***" + string(runes[len(runes)-2:])
+}
+
+// resolveUserChannelModelDiscount 计算当前用户在该渠道×模型上的优惠百分点。
+// 有用户指定价时按官方价 × 总折扣；否则按渠道有效单价 × 分组倍率相对官方价。
+func resolveUserChannelModelDiscount(userID int, ch *model.Channel, modelName string, groupRatio float64) float64 {
+	if ov, ok := model.GetEnabledUserModelPricingOverride(userID, modelName); ok {
+		tp := ov.TotalPercent()
+		if tp < 0 || tp >= 100 {
+			return 0
+		}
+		return 100 - tp
+	}
+	var official float64
+	if p, ok := ratio_setting.GetModelPrice(modelName, false); ok && p > 0 {
+		official = p
+	} else if r, _, _ := ratio_setting.GetModelRatio(modelName); r > 0 {
+		official = r
+	} else {
+		return 0
+	}
+	current, ok := ResolveChannelModelConfiguredUnitPrice(ch, modelName)
+	if !ok || current <= 0 {
+		return 0
+	}
+	if groupRatio > 0 {
+		current *= groupRatio
+	}
+	if current >= official {
+		return 0
+	}
+	return (1 - current/official) * 100
 }
 
 // ResolveChannelModelConfiguredUnitPriceOrZero 用于 UI 展示：有配置定价则返回单价，否则 0。
