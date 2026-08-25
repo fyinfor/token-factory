@@ -6708,7 +6708,10 @@
     "仅在需要另一位真人（另一张脸）时使用。同一人物请进入其素材空间继续上传。": "Only when you need another real person (another face). For the same person, open their material space and keep uploading.",
     "非热门": "Not Hot",
     "首页热门": "Homepage Hot",
-    "首页热门配置": "Homepage Hot Configuration"
+    "首页热门配置": "Homepage Hot Configuration",
+    "Antom 收银台": "Antom Checkout",
+    "启用 Antom 收银台": "Enable Antom Checkout",
+    "管理员未开启 Antom 充值！": "Admin has not enabled Antom top-up!"
   },
   "上传失败": "Upload failed",
   "上传失败，请重试": "Upload failed, please retry",

@@ -30,7 +30,7 @@ const PaymentMethodSelectModal = ({
       return <AlipayPayLogo size={22} />;
     }
     if (payMethod.type === 'antom') {
-      return <AntomPayLogo height={20} />;
+      return <AntomPayLogo size={22} />;
     }
     if (payMethod.type === 'wxpay') {
       return <WeChatPayLogo size={22} />;
