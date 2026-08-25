@@ -37,6 +37,7 @@ import {
 import { SiStripe, SiBinance, SiEthereum, SiPaypal } from 'react-icons/si';
 import {
   AlipayPayLogo,
+  AntomPayLogo,
   WeChatPayLogo,
   ErpPayLogo,
   isLogoOnlyPayMethod,
@@ -61,13 +62,15 @@ const { Text } = Typography;
 const PAY_ICON_SIZE = 22;
 
 const iconOnlyBtnClass = '!rounded-lg !p-2 !min-w-[40px] !min-h-[40px]';
+const antomLogoBtnClass = '!rounded-lg !px-2 !py-1 !min-w-[92px] !min-h-[40px]';
 const payBtnClass = '!rounded-lg !px-4 !py-2';
 
 function renderPayMethodIcon(payMethod) {
   switch (payMethod.type) {
     case 'alipay':
-    case 'antom':
       return <AlipayPayLogo size={28} />;
+    case 'antom':
+      return <AntomPayLogo height={22} />;
     case 'wxpay':
       return <WeChatPayLogo size={28} />;
     case 'stripe':
@@ -399,7 +402,11 @@ const RechargeCard = ({
                                     icon={renderPayMethodIcon(payMethod)}
                                     aria-label={displayLabel}
                                     className={
-                                      logoOnly ? iconOnlyBtnClass : payBtnClass
+                                      payMethod.type === 'antom'
+                                        ? antomLogoBtnClass
+                                        : logoOnly
+                                          ? iconOnlyBtnClass
+                                          : payBtnClass
                                     }
                                   >
                                     {logoOnly ? null : getPayMethodDisplayName(payMethod, t)}

@@ -1,7 +1,7 @@
 /*
 Copyright (C) 2025 QuantumNous
 
-支付宝 / 微信支付官方品牌 Logo（静态资源）
+支付宝 / 微信支付 / Antom 官方品牌 Logo（静态资源）
 */
 
 import React from 'react';
@@ -9,22 +9,26 @@ import React from 'react';
 const ALIPAY_LOGO_SRC = '/payment-brands/alipay.png';
 const WECHAT_PAY_LOGO_SRC = '/payment-brands/wechatpay.png';
 const ERP_LOGO_SRC = '/payment-brands/erp.png';
+const ANTOM_LOGO_SRC = '/payment-brands/antom.png';
 
-function PayBrandImage({ src, size, className, alt }) {
+function PayBrandImage({ src, size, width, height, className, alt }) {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <img
       src={src}
       alt={alt}
-      width={size}
-      height={size}
+      width={w}
+      height={h}
       className={className}
       aria-hidden={!alt}
       draggable={false}
       style={{
         display: 'block',
-        width: size,
-        height: size,
+        width: w,
+        height: h,
         objectFit: 'contain',
+        borderRadius: 6,
       }}
     />
   );
@@ -52,6 +56,19 @@ export function WeChatPayLogo({ size = 24, className }) {
   );
 }
 
+export function AntomPayLogo({ height = 22, className }) {
+  const width = Math.round((height * 87) / 36);
+  return (
+    <PayBrandImage
+      src={ANTOM_LOGO_SRC}
+      width={width}
+      height={height}
+      className={className}
+      alt='Antom'
+    />
+  );
+}
+
 export function ErpPayLogo({ size = 24, className }) {
   return (
     <PayBrandImage
@@ -64,5 +81,5 @@ export function ErpPayLogo({ size = 24, className }) {
 }
 
 export function isLogoOnlyPayMethod(type) {
-  return type === 'alipay' || type === 'wxpay';
+  return type === 'alipay' || type === 'wxpay' || type === 'antom';
 }

@@ -8,7 +8,7 @@ var AntomPublicKey = ""
 var AntomGatewayURL = "https://open-sea-global.alipay.com"
 var AntomPayCurrency = "CNY"
 var AntomSettlementCurrency = ""
-var AntomPaymentMethods = "ALIPAY_CN,ALIPAY_HK"
+var AntomPaymentMethods = ""
 var AntomMinTopUp = 1
 
 func AntomConfigured() bool {
@@ -41,7 +41,7 @@ func GetAntomSettlementCurrency() string {
 
 func GetAntomPaymentMethodTypes() []string {
 	raw := strings.TrimSpace(AntomPaymentMethods)
-	if raw == "" {
+	if raw == "" || isHostedUnrestrictedMethodList(raw) {
 		return nil
 	}
 	parts := strings.Split(raw, ",")
@@ -61,12 +61,34 @@ func GetAntomPaymentMethodTypes() []string {
 	return out
 }
 
+// isHostedUnrestrictedMethodList 历史默认「支付宝+支付宝HK」会把 Visa 等卡挡掉。
+// Hosted 收银台应交给 Antom 按已开通方式+币种展示，该组合视为不限制。
+func isHostedUnrestrictedMethodList(raw string) bool {
+	parts := strings.Split(raw, ",")
+	seen := map[string]struct{}{}
+	for _, p := range parts {
+		t := strings.ToUpper(strings.TrimSpace(p))
+		if t == "" {
+			continue
+		}
+		if t != "ALIPAY_CN" && t != "ALIPAY_HK" {
+			return false
+		}
+		seen[t] = struct{}{}
+	}
+	_, cn := seen["ALIPAY_CN"]
+	_, hk := seen["ALIPAY_HK"]
+	return cn && hk
+}
+
 func paymentMethodMatchesCurrency(method, currency string) bool {
 	switch method {
 	case "ALIPAY_CN":
 		return currency == "CNY"
 	case "ALIPAY_HK":
 		return currency == "HKD"
+	case "CARD", "VISA", "MASTERCARD", "JCB", "AMEX", "UNIONPAY":
+		return true
 	default:
 		return true
 	}
