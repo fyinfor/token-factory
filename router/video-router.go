@@ -24,12 +24,13 @@ func SetVideoRouter(router *gin.Engine) {
 		videoV1Router.GET("/video/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos/:video_id/remix", controller.RelayTask)
 	}
-	// 火山方舟 Contents API 查询入口（与官方 GET /api/v3/contents/generations/tasks/{id} 对齐）。
-	// 旧接口 GET /v1/video/generations/{task_id} 逻辑不变；本路径走同一 RelayTaskFetch，回包做字段适配。
+	// 火山方舟 Contents API（与官方 /api/v3/contents/generations/tasks 对齐）。
+	// 旧接口 POST/GET /v1/video/generations 逻辑不变；本路径走同一 RelayTask / RelayTaskFetch，回包做字段适配。
 	arkContentsRouter := router.Group("/api/v3")
 	arkContentsRouter.Use(middleware.RouteTag("relay"))
 	arkContentsRouter.Use(middleware.TokenAuth(), middleware.Distribute())
 	{
+		arkContentsRouter.POST("/contents/generations/tasks", controller.RelayTask)
 		arkContentsRouter.GET("/contents/generations/tasks/:task_id", controller.RelayTaskFetch)
 	}
 	// openai compatible API video routes

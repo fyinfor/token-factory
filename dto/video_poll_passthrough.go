@@ -29,6 +29,12 @@ func IsContentsGenerationsFetchPath(path string) bool {
 	return strings.HasPrefix(p, "/api/v3/contents/generations/tasks/")
 }
 
+// IsContentsGenerationsSubmitPath 判断是否为 POST /api/v3/contents/generations/tasks 创建任务路由。
+func IsContentsGenerationsSubmitPath(path string) bool {
+	p := strings.TrimRight(strings.TrimSpace(path), "/")
+	return p == "/api/v3/contents/generations/tasks"
+}
+
 // ExtractVideoPollPassthroughFields 从上游查询原始 JSON 中提取需透传的字段。
 // 依次扫描顶层、data、result、resultSummary 对象；字段存在即保留原值（含 0 / false / 空字符串）。
 func ExtractVideoPollPassthroughFields(upstreamJSON []byte) map[string]any {

@@ -59,7 +59,11 @@ func ensureSeedanceDefaultPromptAndPersistRawBody(c *gin.Context) *dto.TaskError
 
 	persistBytes := raw
 	if promptMissing(bodyMap["prompt"]) {
-		bodyMap["prompt"] = seedanceDefaultPrompt
+		filledPrompt := strings.TrimSpace(textFromSeedanceContent(bodyMap["content"]))
+		if filledPrompt == "" {
+			filledPrompt = seedanceDefaultPrompt
+		}
+		bodyMap["prompt"] = filledPrompt
 		filled, mErr := common.Marshal(bodyMap)
 		if mErr != nil {
 			return service.TaskErrorWrapperLocal(mErr, "marshal_request_failed", http.StatusInternalServerError)
@@ -68,7 +72,7 @@ func ensureSeedanceDefaultPromptAndPersistRawBody(c *gin.Context) *dto.TaskError
 			return service.TaskErrorWrapperLocal(err, "replace_request_body_failed", http.StatusInternalServerError)
 		}
 		persistBytes = filled
-		logger.LogInfo(c, fmt.Sprintf("seedance: empty prompt filled with default %q for gateway validation", seedanceDefaultPrompt))
+		logger.LogInfo(c, fmt.Sprintf("seedance: empty prompt filled with %q for gateway validation", filledPrompt))
 	}
 
 	// 落库用完整 JSON（含 content / resolution 等透传字段），便于线上排查。
@@ -85,6 +89,33 @@ func promptMissing(v any) bool {
 	default:
 		return strings.TrimSpace(fmt.Sprint(p)) == ""
 	}
+}
+
+// textFromSeedanceContent 从官方 content[] 提取 type=text 的文案，供网关校验/计费使用。
+func textFromSeedanceContent(contentRaw any) string {
+	items, ok := contentRaw.([]any)
+	if !ok {
+		return ""
+	}
+	var parts []string
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := m["type"].(string)
+		if strings.ToLower(strings.TrimSpace(typ)) != "text" {
+			continue
+		}
+		s, ok := m["text"].(string)
+		if !ok {
+			continue
+		}
+		if t := strings.TrimSpace(s); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 // enrichSeedanceTaskRequestFromContent 把 content[] 中的参考图/视频同步到 TaskSubmitReq，

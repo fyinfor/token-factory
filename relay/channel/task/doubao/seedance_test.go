@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateSeedanceTaskRequest_FillsDefaultPromptAndPersistsRawBody(t *testing.T) {
+func TestValidateSeedanceTaskRequest_FillsPromptFromContentText(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{
 		"model": "Seedance 2.0/cy2",
@@ -40,7 +40,7 @@ func TestValidateSeedanceTaskRequest_FillsDefaultPromptAndPersistsRawBody(t *tes
 
 	req, gErr := relaycommon.GetTaskRequest(c)
 	require.NoError(t, gErr)
-	assert.Equal(t, seedanceDefaultPrompt, req.Prompt)
+	assert.Equal(t, "帮我把视频附件里面的食物换成图片附件里面的面霜", req.Prompt)
 	assert.Equal(t, constant.TaskActionReferenceGenerate, info.Action)
 	require.Len(t, req.Images, 1)
 	assert.Equal(t, "https://example.com/a.png", req.Images[0])
@@ -53,7 +53,7 @@ func TestValidateSeedanceTaskRequest_FillsDefaultPromptAndPersistsRawBody(t *tes
 	require.True(t, ok)
 	var got map[string]any
 	require.NoError(t, common.UnmarshalJsonStr(persisted, &got))
-	assert.Equal(t, seedanceDefaultPrompt, got["prompt"])
+	assert.Equal(t, "帮我把视频附件里面的食物换成图片附件里面的面霜", got["prompt"])
 	assert.Equal(t, "480p", got["resolution"])
 	assert.Equal(t, false, got["watermark"])
 	content, ok := got["content"].([]any)
@@ -129,6 +129,30 @@ func TestPromptMissing(t *testing.T) {
 	assert.True(t, promptMissing(""))
 	assert.True(t, promptMissing("  "))
 	assert.False(t, promptMissing("hello"))
+}
+
+func TestTextFromSeedanceContent(t *testing.T) {
+	assert.Equal(t, "", textFromSeedanceContent(nil))
+	assert.Equal(t, "小猫跳舞", textFromSeedanceContent([]any{
+		map[string]any{"type": "text", "text": "小猫跳舞"},
+		map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://x.png"}},
+	}))
+}
+
+func TestValidateSeedanceTaskRequest_FillsDefaultPromptWhenNoContentText(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"Seedance 2.0","resolution":"480p","duration":5}`)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v3/contents/generations/tasks", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeSeedance},
+	}
+	err := validateSeedanceTaskRequest(c, info)
+	require.Nil(t, err)
+	req, gErr := relaycommon.GetTaskRequest(c)
+	require.NoError(t, gErr)
+	assert.Equal(t, seedanceDefaultPrompt, req.Prompt)
 }
 
 func TestValidateSeedanceTaskRequest_PromotesCallbackAndReturnLastFrame(t *testing.T) {

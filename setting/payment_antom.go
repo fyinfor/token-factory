@@ -36,17 +36,13 @@ func GetAntomPayCurrency() string {
 }
 
 func GetAntomSettlementCurrency() string {
-	cur := strings.ToUpper(strings.TrimSpace(AntomSettlementCurrency))
-	if cur == "" {
-		return GetAntomPayCurrency()
-	}
-	return cur
+	return strings.ToUpper(strings.TrimSpace(AntomSettlementCurrency))
 }
 
 func GetAntomPaymentMethodTypes() []string {
 	raw := strings.TrimSpace(AntomPaymentMethods)
 	if raw == "" {
-		return []string{"ALIPAY_CN", "ALIPAY_HK"}
+		return nil
 	}
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
@@ -62,8 +58,31 @@ func GetAntomPaymentMethodTypes() []string {
 		seen[t] = struct{}{}
 		out = append(out, t)
 	}
-	if len(out) == 0 {
-		return []string{"ALIPAY_CN", "ALIPAY_HK"}
+	return out
+}
+
+func paymentMethodMatchesCurrency(method, currency string) bool {
+	switch method {
+	case "ALIPAY_CN":
+		return currency == "CNY"
+	case "ALIPAY_HK":
+		return currency == "HKD"
+	default:
+		return true
+	}
+}
+
+func GetAntomPaymentMethodTypesForCurrency(currency string) []string {
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	all := GetAntomPaymentMethodTypes()
+	if len(all) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(all))
+	for _, m := range all {
+		if paymentMethodMatchesCurrency(m, currency) {
+			out = append(out, m)
+		}
 	}
 	return out
 }

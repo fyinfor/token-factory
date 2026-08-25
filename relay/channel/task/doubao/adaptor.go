@@ -142,7 +142,11 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 }
 
 // BuildRequestBody converts request into Doubao specific format.
+// Contents API 创建入口 POST /api/v3/contents/generations/tasks 原样转发官方请求体（去掉网关专用 prompt），保留 content[] 角色。
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	if contentsGenerationsSubmitPath(c) {
+		return taskcommon.BuildPassThroughRequestBody(c, info)
+	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil, err
@@ -193,6 +197,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
+	if contentsGenerationsSubmitPath(c) {
+		writeContentsGenerationsSubmitResponse(c, info.PublicTaskID)
+		return dResp.ID, responseBody, nil
+	}
+
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
@@ -200,6 +209,20 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 	return dResp.ID, responseBody, nil
+}
+
+func contentsGenerationsSubmitPath(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return dto.IsContentsGenerationsSubmitPath(c.Request.URL.Path)
+}
+
+func writeContentsGenerationsSubmitResponse(c *gin.Context, taskID string) {
+	if c == nil {
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": strings.TrimSpace(taskID)})
 }
 
 // FetchTask 查询上游任务状态。双接口由 body.seedance_fetch_api 选择，实际 HTTP 走 QueryTask。
