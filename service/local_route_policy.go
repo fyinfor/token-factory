@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -107,6 +108,10 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 
 	for _, ch := range channels {
 		if ch == nil {
+			continue
+		}
+		// 已关闭渠道用户无法调用，不进入智能路由展示（与选路/预览口径一致）
+		if ch.Status != common.ChannelStatusEnabled {
 			continue
 		}
 		rawModels := ch.GetModels()
@@ -323,7 +328,7 @@ func ResolveChannelModelConfiguredUnitPriceOrZero(ch *model.Channel, modelName s
 }
 
 // UserRouteChannelVisibleInGroup 判断渠道是否出现在用户智能路由视图的指定分组中
-// （已叠加用户指定价 price_cap / channel_list 过滤）。
+// （仅已启用渠道，并叠加用户指定价 price_cap / channel_list 过滤）。
 func UserRouteChannelVisibleInGroup(userID int, groupKey string, channelID int) bool {
 	if userID <= 0 || groupKey == "" || channelID <= 0 {
 		return false
