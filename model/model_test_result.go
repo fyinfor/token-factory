@@ -295,6 +295,19 @@ func LoadChannelPricingTestSuccessIndex() (map[int][]string, error) {
 	return out, nil
 }
 
+// ChannelModelHasPassedConnectivityTest 判断该渠道×模型是否已有成功连通性单测。
+// 别名模型可匹配自身或映射规范模型上的成功记录，口径与定价页单测门禁一致（不含「渠道从未测过则放行」）。
+func ChannelModelHasPassedConnectivityTest(byChannel map[int][]string, channelID int, modelName string) bool {
+	modelName = strings.TrimSpace(modelName)
+	if ChannelPricingRowMatchesLastTestSuccess(byChannel, channelID, modelName) {
+		return true
+	}
+	if canonical := LookupCachedAliasCanonical(modelName); canonical != "" && canonical != modelName {
+		return ChannelPricingRowMatchesLastTestSuccess(byChannel, channelID, canonical)
+	}
+	return false
+}
+
 // ChannelPricingRowMatchesLastTestSuccess 判断 (channelID, pricingModelName) 是否在单测结果表中存在可匹配的成功记录。
 func ChannelPricingRowMatchesLastTestSuccess(byChannel map[int][]string, channelID int, pricingModelName string) bool {
 	if byChannel == nil || channelID <= 0 {

@@ -23,6 +23,7 @@ import { API, showSuccess, showError } from '../../../../helpers';
 import { getCurrencyConfig } from '../../../../helpers/render';
 import { getUsedGroupContext } from '../../../../helpers/utils';
 import { computeChannelBillingRates } from '../../../../helpers/billingFormula';
+import { formatPriceRatioFromDiscount } from '../../../table/model-pricing/utils/discount';
 import { UserContext } from '../../../../context/User';
 import { StatusContext } from '../../../../context/Status';
 
@@ -421,7 +422,7 @@ const RoutePolicyCard = ({
       const res = await API.delete(apiPaths.deleteWeight(weightID));
       if (res.data.success) {
         if (!quiet) {
-          showSuccess(tLocal('route_policy.weight_deleted'));
+          showSuccess(tLocal('route_policy.weight_cleared'));
           fetchPolicy({ silent: true });
         }
         return true;
@@ -1080,6 +1081,7 @@ const WeightChannelTable = ({
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
             <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
             <th className='py-2 pr-3'>{t('route_policy.group_models')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.user_discount')}</th>
             <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
             <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
             <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
@@ -1148,6 +1150,7 @@ const PriceChannelTable = ({ channels, pricingIndex, t }) => {
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
             <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
             <th className='py-2 pr-3'>{t('route_policy.group_models')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.user_discount')}</th>
             <th className='py-2 pr-3'>
               {t('route_policy.price')} ({currencySymbol}/1M)
             </th>
@@ -1183,6 +1186,9 @@ const PriceChannelTable = ({ channels, pricingIndex, t }) => {
                 <td className='py-2 pr-3 align-top'>
                   <ChannelModelsCell models={modelsInGroup} t={t} />
                 </td>
+                <td className='py-2 pr-3 align-top'>
+                  <UserDiscountCell discount={channel.user_discount} t={t} />
+                </td>
                 <td className='py-2 pr-3 align-top font-mono'>
                   <Typography.Text size='small'>{priceText}</Typography.Text>
                 </td>
@@ -1199,6 +1205,22 @@ const resolveSupplierLabel = (channel) =>
   channel.supplier_alias?.trim() || channel.provider_slug?.trim() || '—';
 
 const resolveRouteSlugLabel = (channel) => channel.route_slug?.trim() || '—';
+
+const UserDiscountCell = ({ discount, t }) => {
+  const value = Number(discount);
+  if (!Number.isFinite(value) || value <= 0) {
+    return (
+      <Typography.Text size='small' type='quaternary'>
+        —
+      </Typography.Text>
+    );
+  }
+  return (
+    <Tag size='small' color='red'>
+      {formatPriceRatioFromDiscount(value, t)}
+    </Tag>
+  );
+};
 
 // ChannelRow renders a single channel in the group table with editable weight/switch.
 const ChannelRow = ({
@@ -1293,6 +1315,9 @@ const ChannelRow = ({
         <ChannelModelsCell models={channel.models_in_group} t={t} />
       </td>
       <td className='py-2 pr-3'>
+        <UserDiscountCell discount={channel.user_discount} t={t} />
+      </td>
+      <td className='py-2 pr-3'>
         <div className='flex items-center gap-1'>
           <InputNumber
             value={weight}
@@ -1307,11 +1332,12 @@ const ChannelRow = ({
           {channel.user_configured && channel.user_weight_id > 0 && (
             <Button
               size='small'
-              type='danger'
-              icon={<Trash2 size={12} />}
+              type='tertiary'
               onClick={() => onDeleteWeight(channel.user_weight_id)}
               disabled={disabled}
-            />
+            >
+              {t('route_policy.clear_weight')}
+            </Button>
           )}
         </div>
       </td>
