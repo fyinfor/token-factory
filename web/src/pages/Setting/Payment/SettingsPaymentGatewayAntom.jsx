@@ -40,6 +40,7 @@ export default function SettingsPaymentGatewayAntom(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
+    AntomEnabled: true,
     AntomClientId: '',
     AntomMerchantPrivateKey: '',
     AntomPublicKey: '',
@@ -55,6 +56,7 @@ export default function SettingsPaymentGatewayAntom(props) {
   useEffect(() => {
     if (props.options && formApiRef.current) {
       const currentInputs = {
+        AntomEnabled: props.options.AntomEnabled ?? true,
         AntomClientId: props.options.AntomClientId || '',
         AntomMerchantPrivateKey: props.options.AntomMerchantPrivateKey || '',
         AntomPublicKey: props.options.AntomPublicKey || '',
@@ -83,6 +85,10 @@ export default function SettingsPaymentGatewayAntom(props) {
     setLoading(true);
     try {
       const options = [];
+      options.push({
+        key: 'AntomEnabled',
+        value: inputs.AntomEnabled ? 'true' : 'false',
+      });
       if (inputs.AntomClientId) {
         options.push({ key: 'AntomClientId', value: inputs.AntomClientId });
       }
@@ -197,6 +203,15 @@ export default function SettingsPaymentGatewayAntom(props) {
             )}
           />
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.Switch
+                field='AntomEnabled'
+                label={t('启用 Antom 收银台')}
+                size='default'
+                checkedText='｜'
+                uncheckedText='〇'
+              />
+            </Col>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='AntomClientId'

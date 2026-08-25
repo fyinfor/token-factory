@@ -2,6 +2,28 @@ package setting
 
 import "testing"
 
+func TestAntomReady(t *testing.T) {
+	origEnabled := AntomEnabled
+	origID, origPriv, origPub := AntomClientId, AntomMerchantPrivateKey, AntomPublicKey
+	t.Cleanup(func() {
+		AntomEnabled = origEnabled
+		AntomClientId, AntomMerchantPrivateKey, AntomPublicKey = origID, origPriv, origPub
+	})
+
+	AntomClientId, AntomMerchantPrivateKey, AntomPublicKey = "cid", "priv", "pub"
+	AntomEnabled = true
+	if !AntomReady() {
+		t.Fatal("expected ready when enabled and configured")
+	}
+	AntomEnabled = false
+	if AntomReady() {
+		t.Fatal("expected not ready when switch off")
+	}
+	if !AntomConfigured() {
+		t.Fatal("configured should ignore switch")
+	}
+}
+
 func TestGetAntomPaymentMethodTypesForCurrency(t *testing.T) {
 	AntomPaymentMethods = "ALIPAY_CN,ALIPAY_HK"
 	if got := GetAntomPaymentMethodTypesForCurrency("CNY"); len(got) != 0 {

@@ -77,7 +77,3 @@ export function ErpPayLogo({ size = 24, className }) {
     />
   );
 }
-
-export function isLogoOnlyPayMethod(type) {
-  return type === 'alipay' || type === 'wxpay' || type === 'antom';
-}

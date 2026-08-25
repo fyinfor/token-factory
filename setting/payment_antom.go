@@ -2,6 +2,7 @@ package setting
 
 import "strings"
 
+var AntomEnabled = true
 var AntomClientId = ""
 var AntomMerchantPrivateKey = ""
 var AntomPublicKey = ""
@@ -15,6 +16,11 @@ func AntomConfigured() bool {
 	return strings.TrimSpace(AntomClientId) != "" &&
 		strings.TrimSpace(AntomMerchantPrivateKey) != "" &&
 		strings.TrimSpace(AntomPublicKey) != ""
+}
+
+// AntomReady 钱包入口与发起支付：开关打开且密钥已配。notify 仍只校验密钥，避免关开关后无法入账。
+func AntomReady() bool {
+	return AntomEnabled && AntomConfigured()
 }
 
 func GetAntomGatewayURL() string {

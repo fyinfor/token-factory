@@ -56,7 +56,7 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
-	if setting.AntomConfigured() {
+	if setting.AntomReady() {
 		hasAntom := false
 		for _, method := range payMethods {
 			if method["type"] == "antom" {
@@ -122,7 +122,7 @@ func GetTopUpInfo(c *gin.Context) {
 				operation_setting.EpayId != "" &&
 				operation_setting.EpayKey != ""),
 		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "",
-		"enable_antom_topup":  setting.AntomConfigured(),
+		"enable_antom_topup":  setting.AntomReady(),
 		"enable_creem_topup":  setting.CreemApiKey != "" && setting.CreemProducts != "[]",
 		"enable_waffo_topup":  enableWaffo,
 		"waffo_pay_methods": func() interface{} {
