@@ -5654,6 +5654,7 @@
     "route_policy.scope": "Область",
     "route_policy.site_global_ref": "Глобальный режим сайта",
     "route_policy.title": "Умная маршрутизация",
+    "route_policy.no_discount": "Без скидки",
     "route_policy.user_discount": "Скидка",
     "route_policy.user_weight": "Вес",
     "route_policy.clear_weight": "Очистить",

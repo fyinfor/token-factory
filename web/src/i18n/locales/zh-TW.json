@@ -5686,6 +5686,7 @@
     "route_policy.scope": "範圍",
     "route_policy.site_global_ref": "目前站點全域模式",
     "route_policy.title": "智能路由",
+    "route_policy.no_discount": "無折扣",
     "route_policy.user_discount": "折扣",
     "route_policy.user_weight": "權重",
     "route_policy.clear_weight": "清空",

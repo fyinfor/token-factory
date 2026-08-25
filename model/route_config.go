@@ -134,7 +134,7 @@ func UpsertModelGroupWeight(groupKey string, channelID int, weight int, enabled 
 		"weight":  weight,
 		"enabled": enabled,
 	}
-	if err := DB.Model(&existing).Updates(updates).Error; err != nil {
+	if err := DB.Model(&existing).Select("weight", "enabled").Updates(updates).Error; err != nil {
 		return existing, err
 	}
 	_ = DB.First(&existing, existing.ID).Error

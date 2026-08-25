@@ -5754,6 +5754,7 @@
     "route_policy.scope": "范围",
     "route_policy.site_global_ref": "当前站点全局模式",
     "route_policy.title": "智能路由",
+    "route_policy.no_discount": "无折扣",
     "route_policy.user_discount": "折扣",
     "route_policy.user_weight": "权重",
     "route_policy.clear_weight": "清空",

@@ -105,7 +105,8 @@ func UpsertUserModelGroupWeight(userID int, groupKey string, channelID int, weig
 		"weight":  weight,
 		"enabled": enabled,
 	}
-	if err := DB.Model(&existing).Updates(updates).Error; err != nil {
+	// Select 强制写入 enabled=false / weight=0，避免 GORM Updates 跳过零值。
+	if err := DB.Model(&existing).Select("weight", "enabled").Updates(updates).Error; err != nil {
 		return existing, err
 	}
 	_ = DB.First(&existing, existing.ID).Error

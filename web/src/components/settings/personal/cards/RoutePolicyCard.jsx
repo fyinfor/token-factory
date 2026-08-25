@@ -1211,7 +1211,7 @@ const UserDiscountCell = ({ discount, t }) => {
   if (!Number.isFinite(value) || value <= 0) {
     return (
       <Typography.Text size='small' type='quaternary'>
-        —
+        {t('route_policy.no_discount')}
       </Typography.Text>
     );
   }
@@ -1241,6 +1241,7 @@ const ChannelRow = ({
   const [weight, setWeight] = useState(() => resolveDisplayWeight(channel));
   const [enabled, setEnabled] = useState(() => resolveEffectiveEnabled(channel));
   const [rowSaving, setRowSaving] = useState(false);
+  const skipBlurSaveRef = useRef(false);
 
   useEffect(() => {
     setWeight(resolveDisplayWeight(channel));
@@ -1254,26 +1255,39 @@ const ChannelRow = ({
     channel.global_configured,
   ]);
 
-  const handleWeightSave = async () => {
-    setRowSaving(true);
-    const ok = await onWeightChange(groupKey, channel.channel_id, weight, enabled);
-    if (ok) {
-      onSaved?.();
+  const persistWeight = async (nextWeight, nextEnabled) => {
+    const currentWeight = resolveDisplayWeight(channel);
+    const currentEnabled = resolveEffectiveEnabled(channel);
+    if (nextWeight === currentWeight && nextEnabled === currentEnabled) {
+      return true;
     }
+    setRowSaving(true);
+    const ok = await onWeightChange(groupKey, channel.channel_id, nextWeight, nextEnabled);
     setRowSaving(false);
+    if (!ok) {
+      setWeight(currentWeight);
+      setEnabled(currentEnabled);
+    }
+    return ok;
   };
 
-  const handleToggle = async (checked) => {
+  const handleWeightBlur = () => {
+    if (skipBlurSaveRef.current) {
+      skipBlurSaveRef.current = false;
+      return;
+    }
+    void persistWeight(weight, enabled);
+  };
+
+  const handleToggle = (checked) => {
     setEnabled(checked);
-    setRowSaving(true);
-    const ok = await onWeightChange(groupKey, channel.channel_id, weight, checked);
-    if (ok) {
-      onSaved?.();
-    }
-    setRowSaving(false);
+    void persistWeight(weight, checked);
   };
 
-  const disabled = saving || rowSaving;
+  const markSkipBlurSave = () => {
+    skipBlurSaveRef.current = true;
+  };
+
   const supplierLabel = resolveSupplierLabel(channel);
   const routeSlugLabel = resolveRouteSlugLabel(channel);
 
@@ -1326,15 +1340,16 @@ const ChannelRow = ({
             max={1000}
             size='small'
             style={{ width: 70 }}
-            onBlur={handleWeightSave}
-            disabled={disabled}
+            onBlur={handleWeightBlur}
+            disabled={saving || rowSaving}
           />
           {channel.user_configured && channel.user_weight_id > 0 && (
             <Button
               size='small'
               type='tertiary'
+              onMouseDown={markSkipBlurSave}
               onClick={() => onDeleteWeight(channel.user_weight_id)}
-              disabled={disabled}
+              disabled={saving}
             >
               {t('route_policy.clear_weight')}
             </Button>
@@ -1342,12 +1357,14 @@ const ChannelRow = ({
         </div>
       </td>
       <td className='py-2 pr-3'>
-        <Switch
-          size='small'
-          checked={enabled}
-          onChange={handleToggle}
-          disabled={disabled}
-        />
+        <span onMouseDown={markSkipBlurSave}>
+          <Switch
+            size='small'
+            checked={enabled}
+            onChange={handleToggle}
+            disabled={saving}
+          />
+        </span>
       </td>
       <td className='py-2 pr-3'>
         {channel.global_configured ? (

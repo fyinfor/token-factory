@@ -5901,6 +5901,7 @@
     "route_policy.scope": "Scope",
     "route_policy.site_global_ref": "Site global mode",
     "route_policy.title": "Smart Routing",
+    "route_policy.no_discount": "No discount",
     "route_policy.user_discount": "Discount",
     "route_policy.user_weight": "Weight",
     "route_policy.clear_weight": "Clear",
