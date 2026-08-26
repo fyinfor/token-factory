@@ -373,6 +373,19 @@ func resolveModelTagsFromRows(modelName string, rows []Model) string {
 	return strings.TrimSpace(rows[bestIdx].Tags)
 }
 
+func resolveExactModelTagsFromRows(modelName string, rows []Model) string {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return ""
+	}
+	for i := range rows {
+		if strings.TrimSpace(rows[i].ModelName) == modelName {
+			return strings.TrimSpace(rows[i].Tags)
+		}
+	}
+	return ""
+}
+
 func loadActiveModelRows() ([]Model, error) {
 	if DB == nil {
 		return nil, nil
@@ -426,4 +439,14 @@ func GetModelTagsByName(modelName string) string {
 		return ""
 	}
 	return resolveModelTagsFromRows(modelName, getActiveModelRowsCached())
+}
+
+// GetExactModelTagsByName 按渠道填写的原始模型名精确读取 models.tags。
+// 仅当 model_name 与入参完全一致时返回标签；不走 name_rule，不映射别名。
+func GetExactModelTagsByName(modelName string) string {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || DB == nil {
+		return ""
+	}
+	return resolveExactModelTagsFromRows(modelName, getActiveModelRowsCached())
 }

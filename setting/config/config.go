@@ -256,6 +256,7 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 			// 复杂类型使用JSON反序列化
 			err := json.Unmarshal([]byte(strValue), field.Addr().Interface())
 			if err != nil {
+				common.SysError("failed to unmarshal config field " + key + ": " + err.Error())
 				continue
 			}
 		}
