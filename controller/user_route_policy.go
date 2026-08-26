@@ -47,61 +47,7 @@ func UserGetRoutePolicy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "load route policy: " + err.Error()})
 		return
 	}
-
-	groups := make([]gin.H, 0, len(policy.Groups))
-	for _, g := range policy.Groups {
-		channels := make([]gin.H, 0, len(g.Channels))
-		for _, ch := range g.Channels {
-			channels = append(channels, gin.H{
-				"channel_id":        ch.ChannelID,
-				"route_slug":        ch.RouteSlug,
-				"name":              ch.Name,
-				"masked_name":       ch.MaskedName,
-				"provider_slug":     ch.ProviderSlug,
-				"supplier_alias":    ch.SupplierAlias,
-				"status":            ch.Status,
-				"models_in_group":   ch.ModelsInGroup,
-				"user_weight":       ch.UserWeight,
-				"user_weight_id":    ch.UserWeightID,
-				"user_enabled":      ch.UserEnabled,
-				"user_configured":   ch.UserConfigured,
-				"global_weight":     ch.GlobalWeight,
-				"global_enabled":    ch.GlobalEnabled,
-				"global_configured": ch.GlobalConfigured,
-				"price":             ch.Price,
-			})
-		}
-		groups = append(groups, gin.H{
-			"group_key":      g.GroupKey,
-			"display_name":   g.DisplayName,
-			"models":         g.Models,
-			"channel_count":  g.ChannelCount,
-			"channels":       channels,
-			"route_disabled": g.RouteDisabled,
-		})
-	}
-
-	userOverrides := make([]gin.H, 0, len(policy.UserOverrides))
-	for _, o := range policy.UserOverrides {
-		userOverrides = append(userOverrides, gin.H{
-			"id": o.ID, "raw_model": o.RawModel, "group_key": o.GroupKey, "is_user": o.IsUser,
-		})
-	}
-	globalOverrides := make([]gin.H, 0, len(policy.GlobalOverrides))
-	for _, o := range policy.GlobalOverrides {
-		globalOverrides = append(globalOverrides, gin.H{
-			"id": o.ID, "raw_model": o.RawModel, "group_key": o.GroupKey, "is_user": o.IsUser,
-		})
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":          true,
-		"mode":             policy.Mode,
-		"global_mode":      policy.GlobalMode,
-		"groups":           groups,
-		"user_overrides":   userOverrides,
-		"global_overrides": globalOverrides,
-	})
+	writeLocalUserRoutePolicyJSON(c, policy)
 }
 
 // UserUpdateRouteMode 更新当前用户的路由模式。

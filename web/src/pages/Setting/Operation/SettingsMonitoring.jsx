@@ -32,7 +32,7 @@ import HttpStatusCodeRulesInput from '../../../components/settings/HttpStatusCod
 
 const AUTO_TEST_MODEL_TAGS_KEY = 'monitor_setting.auto_test_model_tags';
 
-const normalizeTagList = (value) => {
+const parseSavedTagList = (value) => {
   if (Array.isArray(value)) {
     return value.map((tag) => String(tag).trim()).filter(Boolean);
   }
@@ -41,18 +41,18 @@ const normalizeTagList = (value) => {
   }
   try {
     const parsed = JSON.parse(value);
-    return normalizeTagList(parsed);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((tag) => String(tag).trim()).filter(Boolean);
   } catch {
-    return value
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean);
+    return [];
   }
 };
 
 const isSameTagList = (a, b) => {
-  const left = normalizeTagList(a);
-  const right = normalizeTagList(b);
+  const left = parseSavedTagList(a);
+  const right = parseSavedTagList(b);
   return (
     left.length === right.length &&
     left.every((tag, index) => tag === right[index])
@@ -128,6 +128,12 @@ export default function SettingsMonitoring(props) {
           : '';
       return showError(`${t('自动重试状态码格式不正确')}${details}`);
     }
+    if (
+      updateArray.some((item) => item.key === AUTO_TEST_MODEL_TAGS_KEY) &&
+      !Array.isArray(inputs[AUTO_TEST_MODEL_TAGS_KEY])
+    ) {
+      return showError(t('模型标签筛选必须为 JSON 数组'));
+    }
     const requestQueue = updateArray.map((item) => {
       let value = '';
       if (typeof inputs[item.key] === 'boolean') {
@@ -137,7 +143,7 @@ export default function SettingsMonitoring(props) {
           AutomaticDisableStatusCodes: parsedAutoDisableStatusCodes.normalized,
           AutomaticRetryStatusCodes: parsedAutoRetryStatusCodes.normalized,
           [AUTO_TEST_MODEL_TAGS_KEY]: JSON.stringify(
-            normalizeTagList(inputs[AUTO_TEST_MODEL_TAGS_KEY]),
+            parseSavedTagList(inputs[AUTO_TEST_MODEL_TAGS_KEY]),
           ),
         };
         value = normalizedMap[item.key] ?? inputs[item.key];
@@ -173,7 +179,7 @@ export default function SettingsMonitoring(props) {
       if (Object.keys(inputs).includes(key)) {
         currentInputs[key] =
           key === AUTO_TEST_MODEL_TAGS_KEY
-            ? normalizeTagList(props.options[key])
+            ? parseSavedTagList(props.options[key])
             : props.options[key];
       }
     }
@@ -238,9 +244,9 @@ export default function SettingsMonitoring(props) {
                 <Form.Select
                   field={AUTO_TEST_MODEL_TAGS_KEY}
                   label={t('模型标签筛选')}
-                  placeholder={t('不选择则默认全部模型')}
+                  placeholder={t('请选择要测试的模型标签，未选择则不测试')}
                   extraText={t(
-                    '定时或手动测试所有通道时，仅测试命中任一所选标签的模型；不选择时测试全部模型',
+                    '定时或手动测试所有通道时，仅测试模型表中与渠道原始模型名精确匹配、且标签集合显式包含所选标签的模型；未选择任何标签时不执行测试',
                   )}
                   multiple
                   filter
@@ -249,7 +255,7 @@ export default function SettingsMonitoring(props) {
                   onChange={(value) =>
                     setInputs({
                       ...inputs,
-                      [AUTO_TEST_MODEL_TAGS_KEY]: normalizeTagList(value),
+                      [AUTO_TEST_MODEL_TAGS_KEY]: parseSavedTagList(value),
                     })
                   }
                 />

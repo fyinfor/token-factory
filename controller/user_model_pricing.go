@@ -143,11 +143,12 @@ func UpsertUserModelPricing(c *gin.Context) {
 				continue
 			}
 			if _, ok := enabledSet[ch.ChannelId]; !ok {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "渠道 #" + strconv.Itoa(ch.ChannelId) + " 未启用或不支持该模型",
-				})
-				return
+				// 已关闭或不支持该模型的渠道：与预览一致，跳过而不是整单失败
+				continue
+			}
+			cached, cacheErr := model.CacheGetChannel(ch.ChannelId)
+			if cacheErr != nil || cached == nil || cached.Status != common.ChannelStatusEnabled {
+				continue
 			}
 			bindings = append(bindings, model.UserModelPricingChannelBinding{
 				ChannelId: ch.ChannelId,

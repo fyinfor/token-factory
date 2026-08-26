@@ -68,8 +68,8 @@ func (*AntomAdaptor) RequestPay(c *gin.Context, req *AntomPayRequest) {
 		c.JSON(200, gin.H{"message": "error", "data": "不支持的支付渠道"})
 		return
 	}
-	if !setting.AntomConfigured() {
-		c.JSON(200, gin.H{"message": "error", "data": "Antom 未配置"})
+	if !setting.AntomReady() {
+		c.JSON(200, gin.H{"message": "error", "data": "管理员未开启 Antom 充值"})
 		return
 	}
 	if req.Amount < float64(getAntomMinTopup()) {

@@ -136,6 +136,7 @@ func InitOptionMap() {
 	common.OptionMap["StripePriceId"] = setting.StripePriceId
 	common.OptionMap["StripeUnitPrice"] = strconv.FormatFloat(setting.StripeUnitPrice, 'f', -1, 64)
 	common.OptionMap["StripePromotionCodesEnabled"] = strconv.FormatBool(setting.StripePromotionCodesEnabled)
+	common.OptionMap["AntomEnabled"] = strconv.FormatBool(setting.AntomEnabled)
 	common.OptionMap["AntomClientId"] = setting.AntomClientId
 	common.OptionMap["AntomMerchantPrivateKey"] = setting.AntomMerchantPrivateKey
 	common.OptionMap["AntomPublicKey"] = setting.AntomPublicKey
@@ -665,6 +666,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.StripeMinTopUp, _ = strconv.Atoi(value)
 	case "StripePromotionCodesEnabled":
 		setting.StripePromotionCodesEnabled = value == "true"
+	case "AntomEnabled":
+		setting.AntomEnabled = value == "true"
 	case "AntomClientId":
 		setting.AntomClientId = strings.TrimSpace(value)
 	case "AntomMerchantPrivateKey":

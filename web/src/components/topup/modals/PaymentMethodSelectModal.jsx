@@ -4,6 +4,7 @@ import { SiStripe } from 'react-icons/si';
 import { CreditCard, Wallet } from 'lucide-react';
 import {
   AlipayPayLogo,
+  AntomPayLogo,
   WeChatPayLogo,
 } from '../PaymentBrandIcons';
 
@@ -25,8 +26,11 @@ const PaymentMethodSelectModal = ({
   const epayMethods = payMethods.filter((m) => m.type !== 'waffo');
 
   const renderPayIcon = (payMethod) => {
-    if (payMethod.type === 'alipay' || payMethod.type === 'antom') {
+    if (payMethod.type === 'alipay') {
       return <AlipayPayLogo size={22} />;
+    }
+    if (payMethod.type === 'antom') {
+      return <AntomPayLogo size={22} />;
     }
     if (payMethod.type === 'wxpay') {
       return <WeChatPayLogo size={22} />;

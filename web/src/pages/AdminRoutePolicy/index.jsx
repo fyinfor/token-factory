@@ -57,7 +57,9 @@ const AdminRoutePolicyPage = () => {
       } catch (err) {
         if (keyword) {
           showError(
-            err.response?.data?.error || err.message || t('加载用户列表失败'),
+            err.response?.data?.error ||
+              err.message ||
+              t('route_policy.admin_load_users_failed'),
           );
         }
       } finally {
@@ -127,44 +129,42 @@ const AdminRoutePolicyPage = () => {
       <div className='px-2 md:px-8 py-4 md:py-6 space-y-4'>
         <Card className='!rounded-2xl shadow-sm border-0'>
           <Typography.Title heading={4} className='!mb-1'>
-            {t('全局路由管理')}
+            {t('route_policy.admin_page_title')}
           </Typography.Title>
           <Typography.Text type='tertiary'>
-            {t(
-              '配置站点默认路由模板，并可按用户单独调整路由模式、归类开关与权重。',
-            )}
+            {t('route_policy.admin_page_description')}
           </Typography.Text>
         </Card>
 
         <Tabs type='line' keepDOM={false}>
-          <TabPane tab={t('路由模板')} itemKey='template'>
+          <TabPane tab={t('route_policy.admin_tab_template')} itemKey='template'>
             <div className='mt-4'>
               <RoutePolicyCard t={t} variant='admin-template' />
             </div>
           </TabPane>
-          <TabPane tab={t('指定用户')} itemKey='user'>
+          <TabPane tab={t('route_policy.admin_tab_user')} itemKey='user'>
             <div className='mt-4 space-y-4'>
               <Card className='!rounded-2xl shadow-sm border-0'>
                 <Typography.Text strong className='block mb-2'>
-                  {t('选择用户')}
+                  {t('route_policy.admin_select_user')}
                 </Typography.Text>
                 <Select
                   style={{ width: '100%', maxWidth: 480 }}
                   filter
                   remote
                   showClear
-                  placeholder={t('搜索用户名或 ID')}
+                  placeholder={t('route_policy.admin_search_user_placeholder')}
                   optionList={userOptions}
                   value={selectedUserId}
                   loading={searchLoading}
                   onSearch={debouncedSearch}
                   onChange={handleUserChange}
                   onClear={() => handleUserChange(undefined)}
-                  emptyContent={t('无匹配用户')}
+                  emptyContent={t('route_policy.admin_no_matching_user')}
                 />
                 {resolvedUser ? (
                   <div className='mt-3 text-sm text-gray-600 dark:text-gray-300'>
-                    {t('当前编辑')}：{selectedLabel}
+                    {t('route_policy.admin_currently_editing')}：{selectedLabel}
                   </div>
                 ) : null}
               </Card>
@@ -177,7 +177,7 @@ const AdminRoutePolicyPage = () => {
               ) : (
                 <Card className='!rounded-2xl shadow-sm border-0'>
                   <Typography.Text type='tertiary'>
-                    {t('请先选择要管理的用户。')}
+                    {t('route_policy.admin_select_user_first')}
                   </Typography.Text>
                 </Card>
               )}

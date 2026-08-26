@@ -40,13 +40,14 @@ export default function SettingsPaymentGatewayAntom(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
+    AntomEnabled: true,
     AntomClientId: '',
     AntomMerchantPrivateKey: '',
     AntomPublicKey: '',
     AntomGatewayURL: 'https://open-sea-global.alipay.com',
     AntomPayCurrency: 'CNY',
     AntomSettlementCurrency: '',
-    AntomPaymentMethods: 'ALIPAY_CN,ALIPAY_HK',
+    AntomPaymentMethods: '',
     AntomMinTopUp: 1,
   });
   const [originInputs, setOriginInputs] = useState({});
@@ -55,6 +56,7 @@ export default function SettingsPaymentGatewayAntom(props) {
   useEffect(() => {
     if (props.options && formApiRef.current) {
       const currentInputs = {
+        AntomEnabled: props.options.AntomEnabled ?? true,
         AntomClientId: props.options.AntomClientId || '',
         AntomMerchantPrivateKey: props.options.AntomMerchantPrivateKey || '',
         AntomPublicKey: props.options.AntomPublicKey || '',
@@ -63,8 +65,7 @@ export default function SettingsPaymentGatewayAntom(props) {
           'https://open-sea-global.alipay.com',
         AntomPayCurrency: props.options.AntomPayCurrency || 'CNY',
         AntomSettlementCurrency: props.options.AntomSettlementCurrency || '',
-        AntomPaymentMethods:
-          props.options.AntomPaymentMethods || 'ALIPAY_CN,ALIPAY_HK',
+        AntomPaymentMethods: props.options.AntomPaymentMethods || '',
         AntomMinTopUp:
           props.options.AntomMinTopUp !== undefined
             ? parseFloat(props.options.AntomMinTopUp)
@@ -84,6 +85,10 @@ export default function SettingsPaymentGatewayAntom(props) {
     setLoading(true);
     try {
       const options = [];
+      options.push({
+        key: 'AntomEnabled',
+        value: inputs.AntomEnabled ? 'true' : 'false',
+      });
       if (inputs.AntomClientId) {
         options.push({ key: 'AntomClientId', value: inputs.AntomClientId });
       }
@@ -115,7 +120,7 @@ export default function SettingsPaymentGatewayAntom(props) {
       });
       options.push({
         key: 'AntomPaymentMethods',
-        value: inputs.AntomPaymentMethods || 'ALIPAY_CN,ALIPAY_HK',
+        value: inputs.AntomPaymentMethods || '',
       });
       if (
         inputs.AntomMinTopUp !== undefined &&
@@ -199,6 +204,15 @@ export default function SettingsPaymentGatewayAntom(props) {
           />
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.Switch
+                field='AntomEnabled'
+                label={t('启用 Antom 收银台')}
+                size='default'
+                checkedText='｜'
+                uncheckedText='〇'
+              />
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='AntomClientId'
                 label={t('Client ID')}
@@ -238,7 +252,8 @@ export default function SettingsPaymentGatewayAntom(props) {
               <Form.Input
                 field='AntomPaymentMethods'
                 label={t('收银台支付方式')}
-                placeholder='ALIPAY_CN,ALIPAY_HK'
+                placeholder={t('留空则按已开通方式展示；不要只填 ALIPAY_CN,ALIPAY_HK')}
+                extraText={t('AlipayHK 仅 HKD 订单会出现。Visa 在 Dashboard 变为已开通后，留空即可出现在收银台。卡可写 CARD。')}
               />
             </Col>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>

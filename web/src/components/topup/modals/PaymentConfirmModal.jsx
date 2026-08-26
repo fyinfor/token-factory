@@ -21,7 +21,7 @@ import { getPayMethodDisplayName } from '../../../helpers';
 import { Modal, Typography, Card } from '@douyinfe/semi-ui';
 import { SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
-import { AlipayPayLogo, WeChatPayLogo } from '../PaymentBrandIcons';
+import { AlipayPayLogo, AntomPayLogo, WeChatPayLogo } from '../PaymentBrandIcons';
 
 const { Text } = Typography;
 
@@ -86,10 +86,13 @@ const PaymentConfirmModal = ({
                   if (payMethod) {
                     return (
                       <>
-                        {payMethod.type === 'alipay' ||
-                        payMethod.type === 'antom' ? (
+                        {payMethod.type === 'alipay' ? (
                           <span className='mr-2 inline-flex'>
                             <AlipayPayLogo size={18} />
+                          </span>
+                        ) : payMethod.type === 'antom' ? (
+                          <span className='mr-2 inline-flex'>
+                            <AntomPayLogo size={18} />
                           </span>
                         ) : payMethod.type === 'wxpay' ? (
                           <span className='mr-2 inline-flex'>
@@ -132,7 +135,7 @@ const PaymentConfirmModal = ({
                       return (
                         <>
                           <span className='mr-2 inline-flex'>
-                            <AlipayPayLogo size={18} />
+                            <AntomPayLogo size={18} />
                           </span>
                           <Text className='text-slate-900 dark:text-slate-100'>
                             {t('Antom 收银台')}

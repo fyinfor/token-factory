@@ -86,6 +86,7 @@ func LoadAllUserModelGroupWeights(userID int) ([]UserModelGroupWeight, error) {
 
 // UpsertUserModelGroupWeight 创建或更新用户级归类权重。
 func UpsertUserModelGroupWeight(userID int, groupKey string, channelID int, weight int, enabled bool) (UserModelGroupWeight, error) {
+	weight, enabled = NormalizeRouteChannelWeight(weight, enabled)
 	var existing UserModelGroupWeight
 	result := DB.Where("user_id = ? AND group_key = ? AND channel_id = ?", userID, groupKey, channelID).First(&existing)
 	if result.RowsAffected == 0 {
@@ -96,7 +97,9 @@ func UpsertUserModelGroupWeight(userID int, groupKey string, channelID int, weig
 			Weight:    weight,
 			Enabled:   enabled,
 		}
-		if err := DB.Create(&w).Error; err != nil {
+		// Create 必须 Select 含零值字段：Weight 默认 100、Enabled 默认 true，
+		// 否则关闭渠道（enabled=false、weight=0）会落成「开启 + 权重 100」。
+		if err := DB.Select("UserID", "GroupKey", "ChannelID", "Weight", "Enabled").Create(&w).Error; err != nil {
 			return w, err
 		}
 		return w, nil
@@ -105,7 +108,8 @@ func UpsertUserModelGroupWeight(userID int, groupKey string, channelID int, weig
 		"weight":  weight,
 		"enabled": enabled,
 	}
-	if err := DB.Model(&existing).Updates(updates).Error; err != nil {
+	// Select 强制写入 enabled=false / weight=0，避免 GORM Updates 跳过零值。
+	if err := DB.Model(&existing).Select("weight", "enabled").Updates(updates).Error; err != nil {
 		return existing, err
 	}
 	_ = DB.First(&existing, existing.ID).Error
