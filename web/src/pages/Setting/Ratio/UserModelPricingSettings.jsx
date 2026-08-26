@@ -378,7 +378,17 @@ export default function UserModelPricingSettings() {
       });
       const res = await API.get(`/api/user_model_pricing/preview?${params}`);
       if (res.data.success) {
-        setChannelOptions(res.data.data?.channels || []);
+        const channels = res.data.data?.channels || [];
+        setChannelOptions(channels);
+        const enabledIds = new Set(
+          channels.map((ch) => Number(ch.channel_id)).filter((id) => id > 0),
+        );
+        setForm((prev) => ({
+          ...prev,
+          channels: normalizeChannels(prev.channels).filter((c) =>
+            enabledIds.has(c.channel_id),
+          ),
+        }));
       } else {
         showError(res.data.message);
       }
@@ -531,7 +541,16 @@ export default function UserModelPricingSettings() {
       enabled: !!payload.enabled,
     };
     if (mode === MODE_CHANNEL_LIST) {
-      body.channels = normalizeChannels(payload.channels);
+      const enabledIds = new Set(
+        (channelOptions || [])
+          .map((ch) => Number(ch.channel_id))
+          .filter((id) => id > 0),
+      );
+      let channels = normalizeChannels(payload.channels);
+      if (enabledIds.size > 0) {
+        channels = channels.filter((c) => enabledIds.has(c.channel_id));
+      }
+      body.channels = channels;
     }
     const res = await API.post('/api/user_model_pricing/', body);
     return res.data;
@@ -1081,8 +1100,13 @@ export default function UserModelPricingSettings() {
     const existingPri = new Map(
       normalizeChannels(form.channels).map((c) => [c.channel_id, c.priority]),
     );
-    // 保留已选顺序，追加未选的 within_cap 渠道
-    const ordered = normalizeChannels(form.channels).map((c) => c.channel_id);
+    const optionIds = new Set(
+      (channelOptions || []).map((ch) => Number(ch.channel_id)),
+    );
+    // 保留已选且仍开启的渠道顺序，追加未选的 within_cap 渠道
+    const ordered = normalizeChannels(form.channels)
+      .map((c) => c.channel_id)
+      .filter((id) => optionIds.has(id));
     for (const id of ids) {
       if (!existingPri.has(id) && !ordered.includes(id)) {
         ordered.push(id);

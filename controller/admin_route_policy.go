@@ -42,6 +42,7 @@ func writeLocalUserRoutePolicyJSON(c *gin.Context, policy *service.LocalUserRout
 				"global_enabled":    ch.GlobalEnabled,
 				"global_configured": ch.GlobalConfigured,
 				"price":             ch.Price,
+				"user_discount":     ch.UserDiscount,
 			})
 		}
 		groups = append(groups, gin.H{
