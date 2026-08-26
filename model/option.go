@@ -281,6 +281,18 @@ func InitOptionMap() {
 	common.OptionMap["AliyunGuardrailVideoEnabled"] = strconv.FormatBool(setting.AliyunGuardrailVideoEnabled)
 	common.OptionMap["AliyunGuardrailHidePlaygroundMediaTabs"] = strconv.FormatBool(setting.AliyunGuardrailHidePlaygroundMediaTabs)
 	common.OptionMap["AliyunGuardrailUserIDs"] = setting.AliyunGuardrailUserIDsToString()
+	common.OptionMap["VideoWatermarkPolicy"] = setting.VideoWatermarkPolicy
+	common.OptionMap["VideoWatermarkUserIDs"] = setting.VideoWatermarkUserIDsToString()
+	common.OptionMap["ImageWatermarkPolicy"] = setting.ImageWatermarkPolicy
+	common.OptionMap["ImageWatermarkUserIDs"] = setting.ImageWatermarkUserIDsToString()
+	common.OptionMap["ImageWatermarkType"] = setting.ImageWatermarkType
+	common.OptionMap["ImageWatermarkText"] = setting.ImageWatermarkText
+	common.OptionMap["ImageWatermarkLogoURL"] = setting.ImageWatermarkLogoURL
+	common.OptionMap["ImageWatermarkOpacity"] = strconv.FormatFloat(setting.ImageWatermarkOpacity, 'f', -1, 64)
+	common.OptionMap["ImageWatermarkPosition"] = setting.ImageWatermarkPosition
+	common.OptionMap["ImageWatermarkScalePercent"] = strconv.Itoa(setting.ImageWatermarkScalePercent)
+	common.OptionMap["ImageWatermarkMarginPercent"] = strconv.Itoa(setting.ImageWatermarkMarginPercent)
+	common.OptionMap["ImageWatermarkFailureMode"] = setting.ImageWatermarkFailureMode
 	common.OptionMap["AliyunGuardrailAccessKeyID"] = setting.AliyunGuardrailAccessKeyID
 	common.OptionMap["AliyunGuardrailAccessKeySecret"] = setting.AliyunGuardrailAccessKeySecret
 	common.OptionMap["AliyunGuardrailRegionID"] = setting.AliyunGuardrailRegionID
@@ -985,6 +997,63 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AliyunGuardrailRegionID = value
 	case "AliyunGuardrailUserIDs":
 		err = setting.UpdateAliyunGuardrailUserIDs(value)
+	case "VideoWatermarkPolicy":
+		err = setting.CheckVideoWatermarkPolicy(value)
+		if err != nil {
+			return err
+		}
+		setting.SetVideoWatermarkPolicy(value)
+	case "VideoWatermarkUserIDs":
+		err = setting.UpdateVideoWatermarkUserIDs(value)
+	case "ImageWatermarkPolicy":
+		err = setting.CheckImageWatermarkPolicy(value)
+		if err != nil {
+			return err
+		}
+		setting.SetImageWatermarkPolicy(value)
+	case "ImageWatermarkUserIDs":
+		err = setting.UpdateImageWatermarkUserIDs(value)
+	case "ImageWatermarkType":
+		err = setting.CheckImageWatermarkType(value)
+		if err != nil {
+			return err
+		}
+		setting.SetImageWatermarkType(value)
+	case "ImageWatermarkText":
+		err = setting.CheckImageWatermarkText(value)
+		if err == nil {
+			setting.ImageWatermarkText = strings.TrimSpace(value)
+		}
+	case "ImageWatermarkLogoURL":
+		err = setting.CheckImageWatermarkLogoURL(value)
+		if err == nil {
+			setting.ImageWatermarkLogoURL = strings.TrimSpace(value)
+		}
+	case "ImageWatermarkOpacity":
+		err = setting.CheckImageWatermarkOpacity(value)
+		if err == nil {
+			setting.ImageWatermarkOpacity, _ = strconv.ParseFloat(strings.TrimSpace(value), 64)
+		}
+	case "ImageWatermarkPosition":
+		err = setting.CheckImageWatermarkPosition(value)
+		if err == nil {
+			setting.SetImageWatermarkPosition(value)
+		}
+	case "ImageWatermarkScalePercent":
+		err = setting.CheckImageWatermarkScalePercent(value)
+		if err == nil {
+			setting.ImageWatermarkScalePercent, _ = strconv.Atoi(strings.TrimSpace(value))
+		}
+	case "ImageWatermarkMarginPercent":
+		err = setting.CheckImageWatermarkMarginPercent(value)
+		if err == nil {
+			setting.ImageWatermarkMarginPercent, _ = strconv.Atoi(strings.TrimSpace(value))
+		}
+	case "ImageWatermarkFailureMode":
+		err = setting.CheckImageWatermarkFailureMode(value)
+		if err == nil {
+			setting.SetImageWatermarkFailureMode(value)
+		}
 	case "AutomaticDisableKeywords":
 		operation_setting.AutomaticDisableKeywordsFromString(value)
 	case "AutomaticDisableStatusCodes":
