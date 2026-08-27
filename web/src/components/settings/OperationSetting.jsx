@@ -30,6 +30,8 @@ import SettingsDistributor from '../../pages/Setting/Operation/SettingsDistribut
 import SettingsCheckin from '../../pages/Setting/Operation/SettingsCheckin';
 import SettingsComputePage from '../../pages/Setting/Operation/SettingsComputePage';
 import SettingsAliyunRealNameVerification from '../../pages/Setting/Operation/SettingsAliyunRealNameVerification';
+import SettingsVideoWatermark from '../../pages/Setting/Operation/SettingsVideoWatermark';
+import SettingsImageWatermark from '../../pages/Setting/Operation/SettingsImageWatermark';
 import { API, showError, toBoolean } from '../../helpers';
 
 const OperationSetting = ({ activeSection = 'general' }) => {
@@ -86,6 +88,20 @@ const OperationSetting = ({ activeSection = 'general' }) => {
     AliyunGuardrailAccessKeyID: '',
     AliyunGuardrailAccessKeySecret: '',
     AliyunGuardrailRegionID: 'cn-shanghai',
+
+    /* 视频水印策略 */
+    VideoWatermarkPolicy: 'off',
+    VideoWatermarkUserIDs: '',
+    ImageWatermarkPolicy: 'off',
+    ImageWatermarkUserIDs: '',
+    ImageWatermarkType: 'text',
+    ImageWatermarkText: 'TokenFactory',
+    ImageWatermarkLogoURL: '',
+    ImageWatermarkPosition: 'bottom-right',
+    ImageWatermarkScalePercent: '12',
+    ImageWatermarkMarginPercent: '3',
+    ImageWatermarkOpacity: '0.65',
+    ImageWatermarkFailureMode: 'block',
     AliyunRealNameVerificationEnabled: false,
     AliyunRealNameVerificationAccessKeyID: '',
     AliyunRealNameVerificationAccessKeySecret: '',
@@ -186,6 +202,8 @@ const OperationSetting = ({ activeSection = 'general' }) => {
         {activeSection === 'sensitive' && (
           <Card style={{ marginTop: '10px' }}>
             <SettingsSensitiveWords options={inputs} refresh={onRefresh} />
+            <SettingsVideoWatermark options={inputs} refresh={onRefresh} />
+            <SettingsImageWatermark options={inputs} refresh={onRefresh} />
           </Card>
         )}
         {/* 日志设置 */}

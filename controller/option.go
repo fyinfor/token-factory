@@ -732,6 +732,40 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "VideoWatermarkPolicy":
+		err = setting.CheckVideoWatermarkPolicy(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+	case "VideoWatermarkUserIDs":
+		err = setting.CheckVideoWatermarkUserIDs(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+	case "ImageWatermarkPolicy":
+		err = setting.CheckImageWatermarkEnablement(option.Value.(string))
+	case "ImageWatermarkUserIDs":
+		err = setting.CheckImageWatermarkUserIDsUpdate(option.Value.(string))
+	case "ImageWatermarkType", "ImageWatermarkText", "ImageWatermarkLogoURL":
+		err = setting.CheckImageWatermarkContentUpdate(option.Key, option.Value.(string))
+	case "ImageWatermarkOpacity":
+		err = setting.CheckImageWatermarkOpacity(option.Value.(string))
+	case "ImageWatermarkPosition":
+		err = setting.CheckImageWatermarkPosition(option.Value.(string))
+	case "ImageWatermarkScalePercent":
+		err = setting.CheckImageWatermarkScalePercent(option.Value.(string))
+	case "ImageWatermarkMarginPercent":
+		err = setting.CheckImageWatermarkMarginPercent(option.Value.(string))
+	case "ImageWatermarkFailureMode":
+		err = setting.CheckImageWatermarkFailureMode(option.Value.(string))
 	case "AutomaticDisableStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
 		if err != nil {
@@ -743,6 +777,15 @@ func UpdateOption(c *gin.Context) {
 		}
 	case "AutomaticRetryStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+	case "monitor_setting.auto_test_model_tags":
+		_, err = operation_setting.ParseAutoTestModelTagsJSON(option.Value.(string))
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -786,6 +829,13 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	}
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
 	}
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {

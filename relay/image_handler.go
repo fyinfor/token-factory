@@ -57,6 +57,12 @@ func (w *imageResponseCaptureWriter) WriteHeader(code int) {
 	}
 }
 
+func (w *imageResponseCaptureWriter) Flush() {
+	if !w.captureOnly {
+		w.ResponseWriter.Flush()
+	}
+}
+
 func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError *types.TokenFactoryError) {
 	info.InitChannelMeta(c)
 
@@ -305,18 +311,34 @@ func executeImageRelay(c *gin.Context, info *relaycommon.RelayInfo, request *dto
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
 	shouldCheckGuardrailOutput := setting.ShouldCheckAliyunGuardrailOutputForUser(c.GetInt(`id`))
-	captureImageResponse := asyncCapture || shouldCaptureImageResponse(info) || shouldCheckGuardrailOutput
+	shouldApplyImageWatermark := setting.IsImageWatermarkForcedForUser(info.UserId)
+	captureImageResponse := asyncCapture || shouldCaptureImageResponse(info) || shouldCheckGuardrailOutput || shouldApplyImageWatermark
 	var responseCapture *bytes.Buffer
 	originalWriter := c.Writer
+	// The API router may wrap the writer with the gzip middleware before the
+	// image adaptor runs. Keep that encoding marker separate from upstream
+	// entity headers so rewriting the JSON body cannot produce an unlabelled
+	// gzip stream.
+	originalContentEncoding := ""
+	if originalWriter != nil {
+		originalContentEncoding = originalWriter.Header().Get("Content-Encoding")
+	}
 	var captureWriter *imageResponseCaptureWriter
 	if captureImageResponse {
 		responseCapture = &bytes.Buffer{}
 		captureWriter = &imageResponseCaptureWriter{
 			ResponseWriter: c.Writer,
 			buf:            responseCapture,
-			captureOnly:    asyncCapture || shouldCheckGuardrailOutput,
+			captureOnly:    asyncCapture || shouldCheckGuardrailOutput || shouldApplyImageWatermark,
 		}
 		c.Writer = captureWriter
+		defer func() {
+			// DoResponse may fail before the normal success path restores the
+			// writer. Always expose the real writer to controller error handling.
+			if c.Writer == captureWriter {
+				c.Writer = originalWriter
+			}
+		}()
 	}
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -361,18 +383,35 @@ func executeImageRelay(c *gin.Context, info *relaycommon.RelayInfo, request *dto
 			}
 			if guardrailResult != nil && guardrailResult.Blocked {
 				c.Set("aliyun_guardrail_output_blocked", true)
+				clearCapturedImageEntityHeaders(originalWriter)
+				restoreCapturedContentEncoding(originalWriter, originalContentEncoding)
 				return nil, types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked image output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
 			}
+		}
+		originalCaptured := append([]byte(nil), captured...)
+		if shouldApplyImageWatermark {
+			captured, tokenFactoryError = applyImageWatermarkResponse(c, info, captured)
+			if tokenFactoryError != nil {
+				clearCapturedImageEntityHeaders(originalWriter)
+				restoreCapturedContentEncoding(originalWriter, originalContentEncoding)
+				return nil, tokenFactoryError
+			}
+			clearCapturedImageEntityHeaders(originalWriter)
+			restoreCapturedContentEncoding(originalWriter, originalContentEncoding)
+			originalWriter.Header().Set("Content-Type", "application/json; charset=utf-8")
 		}
 		if asyncCapture {
 			responseBody = captured
 		} else {
+			originalWriter.Header().Set("Content-Length", fmt.Sprintf("%d", len(captured)))
 			if captureWriter.statusCode > 0 {
 				originalWriter.WriteHeader(captureWriter.statusCode)
 			}
 			_, _ = originalWriter.Write(captured)
 			originalWriter.Flush()
 		}
+		responseCapture.Reset()
+		_, _ = responseCapture.Write(originalCaptured)
 	} else if asyncCapture && responseCapture != nil {
 		responseBody = append([]byte(nil), responseCapture.Bytes()...)
 	}
@@ -435,4 +474,43 @@ func shouldCaptureImageResponse(info *relaycommon.RelayInfo) bool {
 	}
 	return info.RelayMode == relayconstant.RelayModeImagesGenerations ||
 		info.RelayMode == relayconstant.RelayModeImagesEdits
+}
+
+func clearCapturedImageEntityHeaders(writer gin.ResponseWriter) {
+	if writer == nil {
+		return
+	}
+	for _, key := range []string{
+		"Content-Encoding",
+		"Content-Length",
+		"Content-MD5",
+		"Digest",
+		"ETag",
+		"Last-Modified",
+	} {
+		writer.Header().Del(key)
+	}
+}
+
+func restoreCapturedContentEncoding(writer gin.ResponseWriter, contentEncoding string) {
+	if writer == nil {
+		return
+	}
+	if strings.TrimSpace(contentEncoding) == "" {
+		writer.Header().Del("Content-Encoding")
+		return
+	}
+	writer.Header().Set("Content-Encoding", contentEncoding)
+}
+
+func applyImageWatermarkResponse(c *gin.Context, info *relaycommon.RelayInfo, responseBody []byte) ([]byte, *types.TokenFactoryError) {
+	watermarked, err := service.ApplyImageWatermarkToResponse(info, responseBody)
+	if err == nil {
+		return watermarked, nil
+	}
+	logger.LogError(c, fmt.Sprintf("image watermark output processing failed: %s", err.Error()))
+	if setting.GetImageWatermarkConfig().FailureMode == setting.ImageWatermarkFailureModePassthrough {
+		return responseBody, nil
+	}
+	return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 }

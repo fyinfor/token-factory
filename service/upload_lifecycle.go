@@ -30,6 +30,7 @@ const (
 	UploadPurposeSupplier    = "supplier"
 	UploadPurposeDistributor = "distributor"
 	UploadPurposeChannel     = "channel"
+	UploadPurposeWatermark   = "watermark"
 	UploadPurposePlayground  = "playground"
 	UploadPurposeLegacy      = "legacy"
 )
@@ -46,6 +47,7 @@ var uploadPurposeSpecs = map[string]uploadPurposeSpec{
 	UploadPurposeSupplier:    {directory: "permanent/suppliers"},
 	UploadPurposeDistributor: {directory: "permanent/distributors"},
 	UploadPurposeChannel:     {directory: "permanent/channels"},
+	UploadPurposeWatermark:   {directory: "permanent/watermarks"},
 	UploadPurposePlayground:  {directory: "temporary/playground", temporary: true},
 }
 

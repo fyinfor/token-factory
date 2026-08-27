@@ -1883,47 +1883,36 @@ func buildModelTagFilter(tags []string) map[string]struct{} {
 	return out
 }
 
-// monitorTestCategoryTags 监控测试标签筛选中的能力分类；未选中的分类不应因其它已选标签而被测到。
-var monitorTestCategoryTags = []string{"视频", "图片"}
-
 func modelMatchesTagFilter(modelName string, tagFilter map[string]struct{}) bool {
 	if len(tagFilter) == 0 {
-		return true
+		return false
 	}
-	return modelTagsMatchMonitorFilter(model.GetModelTagsByName(modelName), tagFilter)
+	return modelTagsMatchMonitorFilter(model.GetExactModelTagsByName(modelName), tagFilter)
 }
 
 func modelTagsMatchMonitorFilter(tags string, tagFilter map[string]struct{}) bool {
 	if len(tagFilter) == 0 {
-		return true
+		return false
 	}
 	tags = strings.TrimSpace(tags)
 	if tags == "" {
 		return false
 	}
-	matched := false
 	for tag := range tagFilter {
 		if common.ModelTagsContain(tags, tag) {
-			matched = true
-			break
+			return true
 		}
 	}
-	if !matched {
-		return false
-	}
-	for _, categoryTag := range monitorTestCategoryTags {
-		if _, selected := tagFilter[categoryTag]; selected {
-			continue
-		}
-		if common.ModelTagsContain(tags, categoryTag) {
-			return false
-		}
-	}
-	return true
+	return false
 }
 
-// collectModelsForScheduledChannelTest 返回定时全量测试要对渠道串行探测的模型名列表（与非空 models 的批量上架测试一致）；无任何绑定时返回单元素空串以走 testChannel 内置默认模型。
+// collectModelsForScheduledChannelTest 返回定时/全量测试要串行探测的渠道原始模型名。
+// 使用渠道 models 字段中的原始名称（不经 model_mapping）；标签仅按模型表 model_name 精确匹配。
+// tagFilter 为空表示无可用筛选条件，不测试任何模型。
 func collectModelsForScheduledChannelTest(channel *model.Channel, tagFilter map[string]struct{}) []string {
+	if channel == nil || len(tagFilter) == 0 {
+		return []string{}
+	}
 	raw := channel.GetModels()
 	out := make([]string, 0, len(raw))
 	for _, m := range raw {
@@ -1937,12 +1926,6 @@ func collectModelsForScheduledChannelTest(channel *model.Channel, tagFilter map[
 		if tm != "" && modelMatchesTagFilter(tm, tagFilter) {
 			out = append(out, tm)
 		}
-	}
-	if len(out) == 0 {
-		if len(tagFilter) > 0 {
-			return []string{}
-		}
-		return []string{""}
 	}
 	return out
 }
@@ -1983,17 +1966,26 @@ func testAllChannels(notify bool) error {
 		testAllChannelsLock.Unlock()
 		return errors.New("测试已在运行中")
 	}
+	modelTagFilter := buildModelTagFilter(operation_setting.GetMonitorSetting().AutoTestModelTags)
+	if len(modelTagFilter) == 0 {
+		testAllChannelsLock.Unlock()
+		common.SysLog("scheduled channel test skipped: auto_test_model_tags is empty")
+		return errors.New("未配置模型标签筛选，已跳过通道测试")
+	}
 	testAllChannelsRunning = true
 	testAllChannelsLock.Unlock()
+	common.SysLog(fmt.Sprintf("scheduled channel test: auto_test_model_tags=%v", operation_setting.GetMonitorSetting().AutoTestModelTags))
 	channels, getChannelErr := model.GetAllChannels(0, 0, true, false)
 	if getChannelErr != nil {
+		testAllChannelsLock.Lock()
+		testAllChannelsRunning = false
+		testAllChannelsLock.Unlock()
 		return getChannelErr
 	}
 	var disableThreshold = int64(common.ChannelDisableThreshold * 1000)
 	if disableThreshold == 0 {
 		disableThreshold = 10000000 // a impossible value
 	}
-	modelTagFilter := buildModelTagFilter(operation_setting.GetMonitorSetting().AutoTestModelTags)
 	gopool.Go(func() {
 		// 使用 defer 确保无论如何都会重置运行状态，防止死锁
 		defer func() {
