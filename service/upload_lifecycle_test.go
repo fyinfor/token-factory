@@ -34,6 +34,7 @@ func TestResolveUploadPurpose(t *testing.T) {
 		{input: "suppliers", purpose: UploadPurposeSupplier, directory: "permanent/suppliers"},
 		{input: "distributors", purpose: UploadPurposeDistributor, directory: "permanent/distributors"},
 		{input: "channels", purpose: UploadPurposeChannel, directory: "permanent/channels"},
+		{input: "watermark", purpose: UploadPurposeWatermark, directory: "permanent/watermarks"},
 		{input: " PLAYGROUND ", purpose: UploadPurposePlayground, directory: "temporary/playground", temporary: true},
 	}
 	for _, test := range tests {

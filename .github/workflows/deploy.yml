@@ -3,20 +3,30 @@ name: Deploy to Servers
 # ============================================================================
 # Token Factory — SSH 远程部署工作流
 #
-# 前提: 先手动运行 "编译 Docker 镜像 (GHCR)" 工作流构建并推送镜像
-#       镜像地址: ghcr.io/fyinfor/token-factory:latest
+# 前提: 先手动运行 "编译 Docker 镜像 (GHCR + ACR)" 构建并推送镜像
 #
-# 部署目标 (两台服务器 × 两个实例 = 4 个部署):
+# 镜像源:
+#   服务器 A → ghcr.io/fyinfor/token-factory:<tag>
+#   服务器 B → crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com/fyinfor123/token-factory:<tag>
+#   Node2    → crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com/fyinfor123/token-factory:<tag>
+#
+# 部署目标:
 #   服务器 A (43.132.223.112):
 #     ├─ /home/ubuntu/tokease-token-factory
 #     └─ /home/ubuntu/token-factory
 #   服务器 B (43.138.142.105):
 #     ├─ /home/ubuntu/tokease-token-factory
-#     └─ /home/ubuntu/token-factory
+#     ├─ /home/ubuntu/demo-tokease-token-factory
+#     ├─ /home/ubuntu/token-factory
+#     └─ /home/ubuntu/token-factory-123-tok
+#   Node2 (139.199.57.140):
+#     ├─ /home/ubuntu/tokease-token-factory
+#     └─ /home/ubuntu/seedance2-factory-stack
 #
-# Server A: pull → up → 健康检查 → 清理 → docker save → scp → Server B
-# Server B: docker load tar → up → 健康检查 → 清理
-#   (Server B 无法直连 GHCR, 通过 Server A 中转镜像)
+# 手动触发可选部署目标（默认全部部署）:
+#   deploy_server_a → 112 HK
+#   deploy_server_b → 105 Tencent
+#   deploy_node2    → 140 Node2
 # ============================================================================
 
 on:
@@ -27,21 +37,43 @@ on:
         required: true
         default: 'latest'
         type: string
+      deploy_server_a:
+        description: '部署到 112 HK 国际站 (43.132.223.112)'
+        type: boolean
+        default: true
+      deploy_server_b:
+        description: '部署到 105 Tencent 国内站 (43.138.142.105)'
+        type: boolean
+        default: true
+      deploy_node2:
+        description: '部署到 Node2 (139.199.57.140)'
+        type: boolean
+        default: true
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: fyinfor/token-factory
-
-# 部署脚本 (复用, 避免重复)
-# 用法: 在 SSH script 中 source 此脚本后调用 deploy_instance <路径>
-# 注意: 此处仅作为文档说明, 实际脚本内联在 job 中
+  REGISTRY_GHCR: ghcr.io
+  IMAGE_NAME_GHCR: fyinfor/token-factory
+  REGISTRY_ACR: crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com
+  IMAGE_NAME_ACR: fyinfor123/token-factory
 
 jobs:
+  validate-inputs:
+    name: Validate deploy targets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require at least one server
+        if: ${{ github.event.inputs.deploy_server_a != 'true' && github.event.inputs.deploy_server_b != 'true' && github.event.inputs.deploy_node2 != 'true' }}
+        run: |
+          echo "::error::请至少勾选一台服务器（112 / 105 / Node2）"
+          exit 1
+
   # ═════════════════════════════════════════════════════════════════════════
   # 服务器 A: 43.132.223.112  (SSH Key 认证)
   # ═════════════════════════════════════════════════════════════════════════
   deploy-server-a:
     name: Deploy → 43.132.223.112
+    needs: validate-inputs
+    if: ${{ github.event.inputs.deploy_server_a == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -55,7 +87,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/tokease-token-factory"
 
             echo "========================================="
@@ -108,7 +140,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/token-factory"
 
             echo "========================================="
@@ -159,51 +191,6 @@ jobs:
             sudo docker image prune || true
             echo "✅ Cleanup done"
 
-      - name: Save image & transfer to Server B (43.138.142.105)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_A_HOST }}
-          port: ${{ secrets.SERVER_A_PORT || 22 }}
-          username: ${{ secrets.SERVER_A_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
-          script: |
-            set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
-            TAR_FILE="/home/ubuntu/token-factory-${{ inputs.tag }}.tar"
-            TARGET_IP="${{ secrets.SERVER_B_HOST }}"
-            KEY_FILE="/home/ubuntu/.ssh/ssh_key_b_$$"
-
-            echo "========================================="
-            echo "  中转镜像到 Server B: $TARGET_IP"
-            echo "  镜像:  $IMAGE"
-            echo "========================================="
-
-            echo ""
-            echo "[1/4] Setting up SSH key for Server B..."
-            cat > "$KEY_FILE" << 'EOFBKEY'
-            ${{ secrets.SSH_PRIVATE_KEY_105 }}
-            EOFBKEY
-            chmod 600 "$KEY_FILE"
-            echo "✅ Key ready (PID $$)"
-
-            echo ""
-            echo "[2/4] Saving image..."
-            sudo docker save -o "$TAR_FILE" "$IMAGE"
-            # 让 ubuntu 用户能读取 tar (sudo 生成的文件属主是 root)
-            sudo chmod 644 "$TAR_FILE"
-            echo "✅ Saved: $(ls -lh "$TAR_FILE" | awk '{print $5}')"
-
-            echo ""
-            echo "[3/4] Transferring to $TARGET_IP..."
-            scp -i "$KEY_FILE" -o StrictHostKeyChecking=no "$TAR_FILE" ubuntu@"$TARGET_IP":/home/ubuntu/tokease-token-factory/
-            echo "✅ Transferred"
-
-            echo ""
-            echo "[4/4] Cleaning up..."
-            rm -f "$KEY_FILE"
-            sudo rm -f "$TAR_FILE"
-            echo "✅ Done — Server B can now load the image"
-
       - name: Summary (Server A)
         if: always()
         run: |
@@ -214,7 +201,7 @@ jobs:
             echo ""
             echo "| 项目 | 值 |"
             echo "|------|-----|"
-            echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}\` |"
+            echo "| 镜像 | \`${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}:${{ inputs.tag }}\` |"
             echo "| 实例1 | tokease-token-factory |"
             echo "| 实例2 | token-factory |"
           } >> $GITHUB_STEP_SUMMARY
@@ -224,11 +211,27 @@ jobs:
   # ═════════════════════════════════════════════════════════════════════════
   deploy-server-b:
     name: Deploy → 43.138.142.105
+    needs: validate-inputs
+    if: ${{ github.event.inputs.deploy_server_b == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: deploy-server-a
 
     steps:
+      - name: Login to ACR (43.138.142.105)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_B_HOST }}
+          port: ${{ secrets.SERVER_B_PORT || 22 }}
+          username: ${{ secrets.SERVER_B_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
+          script: |
+            set -e
+            echo "${{ secrets.ACR_ALLINONE_PASSWORD }}" | sudo docker login \
+              ${{ env.REGISTRY_ACR }} \
+              -u "${{ secrets.ACR_ALLINONE_USERNAME }}" \
+              --password-stdin
+            echo "✅ ACR login success"
+
       - name: Deploy tokease-token-factory (43.138.142.105)
         uses: appleboy/ssh-action@v1
         with:
@@ -238,8 +241,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
-            TAR_FILE="/home/ubuntu/tokease-token-factory/token-factory-${{ inputs.tag }}.tar"
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/tokease-token-factory"
 
             echo "========================================="
@@ -252,9 +254,8 @@ jobs:
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
             echo ""
-            echo "[1/3] Loading image from tar..."
-            sudo docker load -i "$TAR_FILE"
-            sudo rm -f "$TAR_FILE"
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
 
             echo ""
             echo "[2/3] Starting services..."
@@ -283,6 +284,54 @@ jobs:
 
             sudo docker compose ps
 
+      - name: Deploy demo-tokease-token-factory (43.138.142.105)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_B_HOST }}
+          port: ${{ secrets.SERVER_B_PORT || 22 }}
+          username: ${{ secrets.SERVER_B_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/demo-tokease-token-factory"
+
+            echo "========================================="
+            echo "  服务器: ${{ secrets.SERVER_B_HOST }}"
+            echo "  实例:   demo-tokease-token-factory"
+            echo "  镜像:   $IMAGE"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo "[2/3] Starting services..."
+            sudo docker compose up -d
+
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ demo-tokease-token-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose ps
+              sudo docker compose logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose ps
+
       - name: Deploy token-factory (43.138.142.105)
         uses: appleboy/ssh-action@v1
         with:
@@ -292,7 +341,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/token-factory"
 
             echo "========================================="
@@ -303,16 +352,67 @@ jobs:
 
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
-            echo "[1/2] Starting services (镜像已在 tokease 步骤加载)..."
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo "[2/3] Starting services..."
             sudo docker compose up -d
 
-            echo "[2/2] Health check..."
+            echo "[3/3] Health check..."
             sleep 5
             HEALTHY=false
             for i in 1 2 3 4 5; do
               if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
                 HEALTHY=true
                 echo "✅ token-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose ps
+              sudo docker compose logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose ps
+
+      - name: Deploy token-factory-123-tok (43.138.142.105)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_B_HOST }}
+          port: ${{ secrets.SERVER_B_PORT || 22 }}
+          username: ${{ secrets.SERVER_B_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/token-factory-123-tok"
+
+            echo "========================================="
+            echo "  服务器: ${{ secrets.SERVER_B_HOST }}"
+            echo "  实例:   token-factory-123-tok"
+            echo "  镜像:   $IMAGE"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo "[2/3] Starting services..."
+            sudo docker compose up -d
+
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ token-factory-123-tok 容器运行中 (第 ${i} 次检查)"
                 break
               fi
               echo "⏳ 等待... (${i}/5)"
@@ -350,7 +450,166 @@ jobs:
             echo ""
             echo "| 项目 | 值 |"
             echo "|------|-----|"
-            echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}\` |"
+            echo "| 镜像 | \`${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}\` |"
             echo "| 实例1 | tokease-token-factory |"
-            echo "| 实例2 | token-factory |"
+            echo "| 实例2 | demo-tokease-token-factory |"
+            echo "| 实例3 | token-factory |"
+            echo "| 实例4 | token-factory-123-tok |"
+          } >> $GITHUB_STEP_SUMMARY
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # Node2: 139.199.57.140  (SSH Key 认证，镜像走 ACR)
+  # ═════════════════════════════════════════════════════════════════════════
+  deploy-node2:
+    name: Deploy → Node2 139.199.57.140
+    needs: validate-inputs
+    if: ${{ github.event.inputs.deploy_node2 == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Login to ACR (Node2)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            set -e
+            echo "${{ secrets.ACR_ALLINONE_PASSWORD }}" | sudo docker login \
+              ${{ env.REGISTRY_ACR }} \
+              -u "${{ secrets.ACR_ALLINONE_USERNAME }}" \
+              --password-stdin
+            echo "✅ ACR login success"
+
+      - name: Deploy tokease-token-factory (139.199.57.140)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/tokease-token-factory"
+
+            echo "========================================="
+            echo "  服务器: Node2 ${{ secrets.SERVER_NODE2_HOST }}"
+            echo "  实例:   tokease-token-factory"
+            echo "  镜像:   $IMAGE"
+            echo "  时间:   $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo ""
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo ""
+            echo "[2/3] Starting services..."
+            sudo docker compose up -d
+
+            echo ""
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ tokease-token-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose ps
+              sudo docker compose logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose ps
+
+      - name: Deploy seedance2-factory (139.199.57.140)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/seedance2-factory-stack/seedance2-factory"
+
+            echo "========================================="
+            echo "  服务器: Node2 ${{ secrets.SERVER_NODE2_HOST }}"
+            echo "  实例:   seedance2-factory"
+            echo "  镜像:   $IMAGE"
+            echo "  时间:   $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo ""
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose -f docker-compose.yaml pull
+
+            echo ""
+            echo "[2/3] Starting services..."
+            sudo docker compose -f docker-compose.yaml up -d
+
+            echo ""
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose -f docker-compose.yaml ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ seedance2-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose -f docker-compose.yaml ps
+              sudo docker compose -f docker-compose.yaml logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose -f docker-compose.yaml ps
+
+      - name: Cleanup old images (Node2)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            echo ">>> Cleaning up images older than 72h..."
+            sudo docker image prune || true
+            echo "✅ Cleanup done"
+
+      - name: Summary (Node2)
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="$([ "$STATUS" = "success" ] && echo '✅' || echo '❌')"
+          {
+            echo "### ${ICON} Node2 (139.199.57.140) — ${STATUS}"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "|------|-----|"
+            echo "| 镜像 | \`${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}\` |"
+            echo "| 实例1 | tokease-token-factory |"
+            echo "| 实例2 | seedance2-factory |"
           } >> $GITHUB_STEP_SUMMARY

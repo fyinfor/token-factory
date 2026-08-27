@@ -279,6 +279,10 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
 	}
+	requestBody, err = taskcommon.ForceVideoWatermarkRequestBody(c, info, requestBody)
+	if err != nil {
+		return nil, service.TaskErrorWrapper(err, "apply_video_watermark_policy_failed", http.StatusInternalServerError)
+	}
 
 	// 9. 发送请求
 	resp, err := adaptor.DoRequest(c, info, requestBody)
